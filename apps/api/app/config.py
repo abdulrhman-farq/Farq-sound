@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     # ----- runtime -----
     storage_root: Path = Field(default_factory=lambda: Path("/storage"))
 
+    # ----- observability -----
+    sentry_dsn_web: str = ""
+    sentry_dsn_api: str = ""
+
     # ----- derived flags -----
     @property
     def tts_mode(self) -> Literal["live", "mock"]:

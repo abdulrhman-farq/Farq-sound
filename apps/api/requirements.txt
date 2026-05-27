@@ -12,6 +12,8 @@ python-slugify==8.0.4
 orjson==3.10.7
 structlog==24.4.0
 tenacity==9.0.0
+slowapi==0.1.9
+sentry-sdk[fastapi]==2.18.0
 pydub==0.25.1
 numpy==2.1.2
 soundfile==0.12.1

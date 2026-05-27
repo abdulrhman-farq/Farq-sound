@@ -1,10 +1,14 @@
-"""Supabase JWT verification — used as a FastAPI dependency."""
+"""Supabase JWT verification — used as a FastAPI dependency.
+
+The verified user is also stashed in `request.state.user` so the
+slowapi key function can scope rate limits per user.
+"""
 from __future__ import annotations
 
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.config import get_settings
@@ -37,6 +41,7 @@ def _decode(token: str) -> dict:
 
 
 def require_user(
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> AuthUser:
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -44,18 +49,19 @@ def require_user(
             status.HTTP_401_UNAUTHORIZED, "Missing bearer token."
         )
     payload = _decode(authorization.split(" ", 1)[1])
-    return AuthUser(
+    user = AuthUser(
         id=payload["sub"],
         email=payload.get("email"),
         role=payload.get("role", "authenticated"),
     )
+    # Expose to rate limiter / observability middleware.
+    request.state.user = user
+    return user
 
 
 def require_admin(
     user: Annotated[AuthUser, Depends(require_user)],
 ) -> AuthUser:
-    # Admin role is set via Supabase Auth custom claims.
-    # See: https://supabase.com/docs/guides/auth/custom-claims
     if user.role != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only.")
     return user

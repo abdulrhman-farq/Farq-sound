@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.db import service
+from app.db import anon
 from app.schemas import SongDetail, SongSegment, SongSummary
 
 router = APIRouter()
@@ -16,7 +16,7 @@ def list_songs(
     era: Literal["classic", "modern"] | None = None,
     search: str | None = Query(None, min_length=1, max_length=64),
 ) -> list[SongSummary]:
-    q = service().table("songs").select(
+    q = anon().table("songs").select(
         "id, slug, title_ar, title_en, artist_ar, era, "
         "duration_seconds, preview_url, cover_image_url, price_sar"
     ).eq("is_active", True)
@@ -31,7 +31,7 @@ def list_songs(
 @router.get("/{slug}", response_model=SongDetail)
 def get_song(slug: str) -> SongDetail:
     song_row = (
-        service()
+        anon()
         .table("songs")
         .select(
             "id, slug, title_ar, title_en, artist_ar, era, "
@@ -46,7 +46,7 @@ def get_song(slug: str) -> SongDetail:
         raise HTTPException(404, "Song not found.")
 
     segments_rows = (
-        service()
+        anon()
         .table("song_segments")
         .select(
             "id, role, sequence_index, start_ms, end_ms, "

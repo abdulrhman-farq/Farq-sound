@@ -1,13 +1,18 @@
-"""Order lifecycle endpoints."""
-from __future__ import annotations
+"""Order lifecycle endpoints.
 
+All user-scoped queries go through `UserDB` (RLS-respecting). The
+`service()` client is reserved for share-token lookups and webhook
+mutations where the caller has already been authenticated by another
+means (HMAC signature, public token).
+"""
 import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from app.auth import CurrentUser
-from app.db import service
+from app.db import UserDB, service
 from app.schemas import (
     CheckoutResponse,
     CreateOrderRequest,
@@ -19,6 +24,7 @@ from app.schemas import (
     SampleNamePreviewResponse,
 )
 from app.services.payments import CheckoutRequest, get_payment_provider
+from app.utils.ratelimit import limiter
 
 router = APIRouter()
 
@@ -27,9 +33,19 @@ def _share_token() -> str:
     return secrets.token_urlsafe(10)
 
 
+class UpdateNamesRequest(BaseModel):
+    names: NamesPayload
+
+
 @router.post("", response_model=OrderRead)
-def create_order(req: CreateOrderRequest, user: CurrentUser) -> OrderRead:
-    # Validate song exists.
+@limiter.limit("10/hour")
+def create_order(
+    request: Request,
+    req: CreateOrderRequest,
+    user: CurrentUser,
+    db: UserDB,
+) -> OrderRead:
+    # Validate song exists (public table, anon-readable).
     song = (
         service()
         .table("songs")
@@ -49,26 +65,21 @@ def create_order(req: CreateOrderRequest, user: CurrentUser) -> OrderRead:
         "amount_sar": song["price_sar"],
         "share_token": _share_token(),
     }
-    row = (
-        service().table("orders").insert(insert).execute()
-    ).data[0]
+    row = (db.table("orders").insert(insert).execute()).data[0]
     return OrderRead.model_validate(row)
-
-
-class UpdateNamesRequest(__import__("pydantic").BaseModel):
-    names: NamesPayload
 
 
 @router.patch("/{order_id}/names", response_model=OrderRead)
 def update_names(
-    order_id: UUID, req: UpdateNamesRequest, user: CurrentUser
+    order_id: UUID,
+    req: UpdateNamesRequest,
+    user: CurrentUser,
+    db: UserDB,
 ) -> OrderRead:
     row = (
-        service()
-        .table("orders")
+        db.table("orders")
         .select("id, status")
         .eq("id", str(order_id))
-        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -77,8 +88,7 @@ def update_names(
     if row["status"] not in ("draft", "preview_ready", "failed"):
         raise HTTPException(409, "Cannot edit names after payment.")
     updated = (
-        service()
-        .table("orders")
+        db.table("orders")
         .update({"names": req.names.model_dump(exclude_none=True)})
         .eq("id", str(order_id))
         .execute()
@@ -87,13 +97,11 @@ def update_names(
 
 
 @router.get("/{order_id}", response_model=OrderWithJobs)
-def get_order(order_id: UUID, user: CurrentUser) -> OrderWithJobs:
+def get_order(order_id: UUID, user: CurrentUser, db: UserDB) -> OrderWithJobs:
     row = (
-        service()
-        .table("orders")
+        db.table("orders")
         .select("*")
         .eq("id", str(order_id))
-        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -101,8 +109,7 @@ def get_order(order_id: UUID, user: CurrentUser) -> OrderWithJobs:
         raise HTTPException(404, "Order not found.")
 
     jobs_rows = (
-        service()
-        .table("render_jobs")
+        db.table("render_jobs")
         .select("*")
         .eq("order_id", str(order_id))
         .order("started_at", desc=False)
@@ -114,16 +121,12 @@ def get_order(order_id: UUID, user: CurrentUser) -> OrderWithJobs:
 
 @router.post("/{order_id}/render-preview", response_model=OrderRead)
 def render_preview(
-    order_id: UUID,
-    user: CurrentUser,
-    background: BackgroundTasks,
+    order_id: UUID, user: CurrentUser, db: UserDB
 ) -> OrderRead:
     row = (
-        service()
-        .table("orders")
+        db.table("orders")
         .select("*")
         .eq("id", str(order_id))
-        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -135,14 +138,12 @@ def render_preview(
         )
 
     updated = (
-        service()
-        .table("orders")
+        db.table("orders")
         .update({"status": "rendering", "error_message": None})
         .eq("id", str(order_id))
         .execute()
     ).data[0]
 
-    # Enqueue the Celery chain.
     from app.workers.tasks import run_render_chain
 
     run_render_chain.delay(str(order_id), mode="preview")
@@ -150,13 +151,13 @@ def render_preview(
 
 
 @router.post("/{order_id}/checkout", response_model=CheckoutResponse)
-def checkout(order_id: UUID, user: CurrentUser) -> CheckoutResponse:
+def checkout(
+    order_id: UUID, user: CurrentUser, db: UserDB
+) -> CheckoutResponse:
     row = (
-        service()
-        .table("orders")
+        db.table("orders")
         .select("id, user_id, status, amount_sar")
         .eq("id", str(order_id))
-        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -166,8 +167,7 @@ def checkout(order_id: UUID, user: CurrentUser) -> CheckoutResponse:
         raise HTTPException(409, "Order is not ready for checkout.")
 
     profile = (
-        service()
-        .table("profiles")
+        db.table("profiles")
         .select("phone")
         .eq("id", user.id)
         .single()
@@ -188,7 +188,7 @@ def checkout(order_id: UUID, user: CurrentUser) -> CheckoutResponse:
             customer_phone=profile.get("phone"),
         )
     )
-    service().table("orders").update(
+    db.table("orders").update(
         {"moyasar_payment_id": session.payment_id}
     ).eq("id", str(order_id)).execute()
     return CheckoutResponse(
@@ -199,12 +199,13 @@ def checkout(order_id: UUID, user: CurrentUser) -> CheckoutResponse:
 
 
 @router.post("/preview-name", response_model=SampleNamePreviewResponse)
+@limiter.limit("30/hour")
 def preview_name(
-    req: SampleNamePreviewRequest, user: CurrentUser
+    request: Request,
+    req: SampleNamePreviewRequest,
+    user: CurrentUser,
 ) -> SampleNamePreviewResponse:
     """Cheap single-name TTS preview for the customize wizard."""
-    from pathlib import Path
-
     from app.config import get_settings
     from app.services.tts import TTSRequest, get_tts_provider
 
@@ -234,8 +235,6 @@ def preview_name(
         ),
         out_path=out_path,
     )
-    # For dev, serve via API static route. For prod, upload to Supabase
-    # Storage and return a signed URL — see services/storage.py.
     rel = out_path.relative_to(s.storage_root).as_posix()
     return SampleNamePreviewResponse(
         audio_url=f"{s.api_base_url}/storage/{rel}",

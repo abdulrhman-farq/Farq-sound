@@ -59,6 +59,7 @@ tmp/
 *.mp3
 !apps/web/public/samples/*.mp3
 !apps/api/tests/fixtures/*.wav
+!apps/api/assets/watermark.wav
 
 # supabase local
 supabase/.branches

@@ -47,6 +47,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// next-intl reads request headers in `getLocale()`, so every page is
+// already request-time. Opt out of static rendering globally.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: {

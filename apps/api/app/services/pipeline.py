@@ -20,6 +20,27 @@ import soundfile as sf
 log = logging.getLogger(__name__)
 
 
+def slice_reference(
+    source_path: Path,
+    start_ms: int,
+    end_ms: int,
+    out_path: Path,
+) -> Path:
+    """Slice [start_ms, end_ms] from `source_path` and write to `out_path`.
+
+    Used to extract the original-singer segment that the generated audio
+    should match in pitch and duration.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    audio, sr = sf.read(source_path)
+    if audio.ndim > 1:
+        audio = np.mean(audio, axis=1)
+    start = max(0, int(start_ms / 1000.0 * sr))
+    end = min(len(audio), int(end_ms / 1000.0 * sr))
+    sf.write(out_path, audio[start:end].astype(np.float32), sr)
+    return out_path
+
+
 # ---------------------------------------------------------------------
 # Stage 2 — pitch & time match
 # ---------------------------------------------------------------------

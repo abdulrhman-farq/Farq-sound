@@ -21,6 +21,7 @@ from app.services.pipeline import (
     master_to_mp3,
     mixdown,
     pitch_and_time_match,
+    slice_reference,
     splice_into_vocals,
 )
 from app.services.storage import upload_audio
@@ -130,16 +131,22 @@ def run_render_chain(
         job_id = _start_job(order_id, "pitch_match")
         matched_paths: list[Path] = []
         try:
+            vocals_src = Path(song["isolated_vocals_url"])
             for seg, tts_path in zip(segments, tts_out_paths, strict=True):
-                # In production the reference segment is sliced from the
-                # original isolated vocals; for the MVP we let the matcher
-                # rely on the TTS itself for pitch reference when no
-                # extracted ref is provided.
                 target_ms = seg["end_ms"] - seg["start_ms"]
+                # Slice the original-singer segment as the pitch & timing
+                # reference so the generated voice matches the source.
+                ref = work / f"ref-{seg['sequence_index']}.wav"
+                slice_reference(
+                    source_path=vocals_src,
+                    start_ms=seg["start_ms"],
+                    end_ms=seg["end_ms"],
+                    out_path=ref,
+                )
                 out = work / f"matched-{seg['sequence_index']}.wav"
                 pitch_and_time_match(
                     generated_path=tts_path,
-                    reference_path=tts_path,  # MVP placeholder
+                    reference_path=ref,
                     target_duration_ms=target_ms,
                     out_path=out,
                 )

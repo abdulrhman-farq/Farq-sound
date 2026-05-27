@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from app.db import service
+from app.db import anon
 from app.schemas import SharedOrderRead
 
 router = APIRouter()
@@ -13,7 +13,7 @@ router = APIRouter()
 def get_shared_order(token: str) -> SharedOrderRead:
     # Calls the SECURITY DEFINER RPC defined in migrations/0001_init.sql,
     # which only returns rows for delivered orders.
-    rpc = service().rpc("get_shared_order", {"token": token}).execute()
+    rpc = anon().rpc("get_shared_order", {"token": token}).execute()
     rows = rpc.data or []
     if not rows:
         raise HTTPException(404, "Share link not found or order not delivered.")
