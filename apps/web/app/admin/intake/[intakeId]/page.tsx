@@ -40,6 +40,7 @@ export default function IntakeReview({
   const { data: intake } = useQuery({
     queryKey: ["intake", intakeId],
     queryFn: async () => {
+      if (!supabase) throw new Error("Supabase not configured.");
       const { data, error } = await supabase
         .from("catalog_intake")
         .select("*")
@@ -48,6 +49,7 @@ export default function IntakeReview({
       if (error) throw error;
       return data;
     },
+    enabled: !!supabase,
   });
 
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -69,8 +71,9 @@ export default function IntakeReview({
       if (!files || files.length === 0) throw new Error("اختاري ملف عيّنة");
       if (!voiceName.trim()) throw new Error("اكتبي اسم للصوت");
 
-      const token = (await supabase.auth.getSession()).data.session
-        ?.access_token;
+      const token = supabase
+        ? (await supabase.auth.getSession()).data.session?.access_token
+        : null;
       const form = new FormData();
       form.append("name", voiceName.trim());
       if (voiceDesc.trim()) form.append("description", voiceDesc.trim());
