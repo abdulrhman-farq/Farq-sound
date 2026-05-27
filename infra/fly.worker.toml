@@ -1,0 +1,23 @@
+# Fly.io configuration for the Celery worker.
+#
+# First deploy:
+#   fly launch --copy-config --config infra/fly.worker.toml --name farq-sound-worker
+#   fly deploy --config infra/fly.worker.toml
+
+app = "farq-sound-worker"
+primary_region = "fra"
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
+[build]
+  dockerfile = "infra/Dockerfile.worker"
+
+[env]
+  APP_ENV = "production"
+
+[processes]
+  worker = "celery -A app.workers.celery_app worker -l info --concurrency=2"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

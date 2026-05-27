@@ -1,0 +1,49 @@
+# Supabase CLI local-stack config.
+#
+# Run `supabase start` from the repo root to bring up local Postgres,
+# Auth, Storage, and Studio. Migrations and seed are applied
+# automatically from `supabase/migrations/` and `supabase/seed.sql`.
+
+project_id = "farq-sound"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[storage]
+enabled = true
+file_size_limit = "100MiB"
+buckets.farq-sound.public = false
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = false
+enable_confirmations = false
+
+[auth.sms]
+# Local-only: turn on SMS provider in the production dashboard.
+enable_signup = true
+enable_confirmations = false
+template = "رمز التحقق: {{ .Code }}"
+
+[edge_runtime]
+enabled = false
