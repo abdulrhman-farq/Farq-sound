@@ -39,6 +39,12 @@ export default function PreviewPage({
     enabled: !isDemo,
   });
 
+  useEffect(() => {
+    if (order?.status !== "rendering") return;
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [order?.status]);
+
   if (isDemo) {
     const couple = [demoNames?.groom, demoNames?.bride]
       .filter(Boolean)
@@ -68,12 +74,6 @@ export default function PreviewPage({
       </div>
     );
   }
-
-  useEffect(() => {
-    if (order?.status !== "rendering") return;
-    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(id);
-  }, [order?.status]);
 
   const currentStage = order
     ? (order.jobs.find((j) => j.status === "running")?.stage ??
