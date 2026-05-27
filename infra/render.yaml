@@ -1,0 +1,124 @@
+# Render Blueprint — Farq Sound
+# https://render.com/docs/blueprint-spec
+#
+# Deploys 3 services + 1 managed Redis instance in one click.
+# On Render: New → Blueprint → connect this repo → uses infra/render.yaml.
+#
+# After the blueprint is provisioned, fill in the secrets marked
+# `sync: false` from the Render dashboard (Environment tab).
+
+services:
+  # ────────────────────────────────────────────────────────────────
+  # FastAPI service (HTTP)
+  # ────────────────────────────────────────────────────────────────
+  - type: web
+    name: farq-sound-api
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.api
+    dockerContext: .
+    plan: starter
+    region: frankfurt        # closest Render region to Saudi Arabia
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: PORT
+        value: "8000"
+      # Redis from the managed service below
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: farq-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: farq-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: farq-redis
+          property: connectionString
+      # Brand
+      - key: APP_BASE_URL
+        sync: false           # set after Vercel deploy
+      - key: API_BASE_URL
+        sync: false           # set to https://farq-sound-api.onrender.com
+      # Supabase (fill in from Supabase dashboard → Settings → API)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: farq-sound
+      # ElevenLabs (empty = falls back to mock)
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_multilingual_v2
+      # Sentry (optional)
+      - key: SENTRY_DSN_API
+        sync: false
+
+  # ────────────────────────────────────────────────────────────────
+  # Celery worker (background, no HTTP)
+  # ────────────────────────────────────────────────────────────────
+  - type: worker
+    name: farq-sound-worker
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.worker
+    dockerContext: .
+    plan: starter
+    region: frankfurt
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: farq-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: farq-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: farq-redis
+          property: connectionString
+      # Same Supabase + ElevenLabs envs as the API
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: farq-sound
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_multilingual_v2
+      - key: SENTRY_DSN_API
+        sync: false
+
+  # ────────────────────────────────────────────────────────────────
+  # Managed Redis (broker + result backend)
+  # ────────────────────────────────────────────────────────────────
+  - type: redis
+    name: farq-redis
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    ipAllowList: []           # private network only — no public exposure

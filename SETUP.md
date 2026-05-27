@@ -172,35 +172,38 @@ vercel --prod
 
 ---
 
-### الخطوة ٦ — نشر الـ API + Worker (Railway)
+### الخطوة ٦ — نشر الـ API + Worker (Render — موصى به)
 
-```bash
-# للـ API
-railway init
-railway up --service api --config infra/railway.json
-railway domain --service api          # api.farqsound.sa
+`infra/render.yaml` فيه Blueprint جاهز ينشر:
+- **farq-sound-api** (FastAPI، HTTP، فيه healthcheck)
+- **farq-sound-worker** (Celery، خلفية)
+- **farq-redis** (Managed Redis، شبكة خاصة)
 
-# للـ Worker
-railway up --service worker --config infra/railway.worker.json
+**خطوات النشر** (٥ دقايق):
 
-# Redis (managed على Railway)
-railway add redis
-```
+1. ادخلي https://dashboard.render.com → **New** → **Blueprint**
+2. اربطي GitHub، اختاري repo `Farq-sound`، Branch: `main` (أو الفرع اللي تنشرين منه)
+3. Render يقرأ `infra/render.yaml` تلقائياً ويعرض الـ ٣ خدمات
+4. اضغطي **Apply** — بيبدأ بناء كل شي
+5. بعد ما تطلع الخدمات "Live":
+   - افتحي `farq-sound-api` → **Environment** → عبّي القيم `sync: false`:
+     - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`
+     - `ELEVENLABS_API_KEY` (لو متوفّر)
+     - `APP_BASE_URL` = رابط Vercel (من الخطوة الجاية)
+     - `API_BASE_URL` = `https://farq-sound-api.onrender.com`
+   - نفس الشي لـ `farq-sound-worker` (Supabase + ElevenLabs)
+6. بعد عبّي المتغيّرات، Render يعيد النشر تلقائياً
+7. اختبري: `https://farq-sound-api.onrender.com/health` لازم يرجع `200 OK` مع `"tts": "live"` لو ElevenLabs مظبوط
 
-ثم في Dashboard → Variables، أضف:
-- كل المتغيرات من `.env.example`
-- `REDIS_URL` تحصلها تلقائياً من إضافة Redis
+**ملاحظات Render مهمّة:**
+- `Starter` plan: $7/شهر للـ web، $7/شهر للـ worker، $10/شهر للـ Redis = **~$24/شهر**
+- خطّة الـ Free تشتغل لكن تنام بعد ١٥ دقيقة من الخمول — مش مناسبة للإنتاج
+- المنطقة `frankfurt` هي الأقرب للسعودية (~٨٠ms latency)
 
-أو لو تفضّل Fly.io: استخدم `infra/fly.toml` و `infra/fly.worker.toml`:
+**بدائل** (لو تفضّلين منصّة ثانية):
 
-```bash
-fly launch --copy-config --config infra/fly.toml
-fly secrets set $(grep -v '^#' .env | xargs)
-fly deploy
-
-fly launch --copy-config --config infra/fly.worker.toml
-fly deploy --config infra/fly.worker.toml
-```
+- **Railway** → `infra/railway.json` + `railway.worker.json`
+- **Fly.io** → `infra/fly.toml` + `fly.worker.toml`
 
 ---
 
