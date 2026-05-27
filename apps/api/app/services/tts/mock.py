@@ -5,6 +5,7 @@ and CI without burning credits or needing network access.
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -25,11 +26,14 @@ class MockTTSProvider(TTSProvider):
     sample_rate = 44_100
 
     def clone_voice(self, request: VoiceCloneRequest) -> VoiceCloneResult:
-        # Deterministic fake id so tests can assert.
-        import hashlib
-
+        # Deterministic id derived from the voice name so the same input
+        # yields the same id across calls in a dev workflow / tests.
         digest = hashlib.sha1(request.name.encode("utf-8")).hexdigest()[:20]
-        return VoiceCloneResult(voice_id=f"mock_{digest}", name=request.name)
+        return VoiceCloneResult(
+            voice_id=f"mock_{digest}",
+            provider="mock",
+            name=request.name,
+        )
 
     def synthesize(self, request: TTSRequest, out_path: Path) -> TTSResult:
         out_path.parent.mkdir(parents=True, exist_ok=True)

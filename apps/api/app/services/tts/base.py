@@ -32,7 +32,8 @@ class VoiceCloneRequest:
 @dataclass
 class VoiceCloneResult:
     voice_id: str
-    name: str
+    provider: str
+    name: str | None = None
 
 
 class TTSProvider(ABC):
@@ -44,7 +45,8 @@ class TTSProvider(ABC):
         """Render `text_ar` in `voice_model_id`'s voice and write WAV to disk."""
 
     def clone_voice(self, request: VoiceCloneRequest) -> VoiceCloneResult:
-        """Create a cloned voice from samples. Override in providers that support it."""
+        """Create a cloned voice from samples. Override in providers that
+        actually support it (set `supports_cloning = True`)."""
         raise NotImplementedError(
             f"Provider {self.name!r} does not support voice cloning."
         )
