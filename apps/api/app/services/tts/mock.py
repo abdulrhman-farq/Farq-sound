@@ -10,12 +10,26 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from .base import TTSProvider, TTSRequest, TTSResult
+from .base import (
+    TTSProvider,
+    TTSRequest,
+    TTSResult,
+    VoiceCloneRequest,
+    VoiceCloneResult,
+)
 
 
 class MockTTSProvider(TTSProvider):
     name = "mock"
+    supports_cloning = True
     sample_rate = 44_100
+
+    def clone_voice(self, request: VoiceCloneRequest) -> VoiceCloneResult:
+        # Deterministic fake id so tests can assert.
+        import hashlib
+
+        digest = hashlib.sha1(request.name.encode("utf-8")).hexdigest()[:20]
+        return VoiceCloneResult(voice_id=f"mock_{digest}", name=request.name)
 
     def synthesize(self, request: TTSRequest, out_path: Path) -> TTSResult:
         out_path.parent.mkdir(parents=True, exist_ok=True)

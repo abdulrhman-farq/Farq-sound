@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api, type RenderStage } from "@/lib/api";
 import { WaveformPlayer } from "@/components/waveform-player";
@@ -19,11 +19,15 @@ const STAGE_ORDER: RenderStage[] = [
 export default function PreviewPage({
   params,
 }: {
-  params: Promise<{ orderId: string }>;
+  params: { orderId: string };
 }) {
-  const { orderId } = use(params);
+  const { orderId } = params;
   const t = useTranslations();
   const [elapsed, setElapsed] = useState(0);
+  const isDemo = orderId.startsWith("demo-");
+  const demoNames = isDemo && typeof window !== "undefined"
+    ? JSON.parse(window.localStorage.getItem(`farq:names:${orderId}`) ?? "{}")
+    : null;
 
   const { data: order } = useQuery({
     queryKey: ["order", orderId],
@@ -32,7 +36,38 @@ export default function PreviewPage({
       const status = q.state.data?.status;
       return status === "rendering" ? 2_000 : false;
     },
+    enabled: !isDemo,
   });
+
+  if (isDemo) {
+    const couple = [demoNames?.groom, demoNames?.bride]
+      .filter(Boolean)
+      .join(" و ");
+    return (
+      <div className="container py-12 max-w-2xl text-center">
+        <h1 className="font-display text-3xl mb-2">معاينة (وضع تجريبي)</h1>
+        <p className="text-muted-foreground mb-6">
+          هذه معاينة محلية — لتشغيل المعالجة الكاملة للصوت بالأسماء، يلزم تفعيل
+          الـ Backend (راجع <code>SETUP.md</code>).
+        </p>
+        {couple && (
+          <div className="card !p-6 mb-6">
+            <p className="text-sm text-gold tracking-widest mb-2">الأسماء</p>
+            <p className="font-display text-2xl">{couple}</p>
+            <p className="text-sm text-muted-foreground mt-3">
+              {Object.entries(demoNames ?? {})
+                .filter(([k]) => k !== "groom" && k !== "bride")
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(" · ")}
+            </p>
+          </div>
+        )}
+        <Link href="/songs" className="btn-primary">
+          عودة للكتالوج
+        </Link>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (order?.status !== "rendering") return;

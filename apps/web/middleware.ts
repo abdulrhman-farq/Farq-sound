@@ -1,12 +1,4 @@
-import createMiddleware from "next-intl/middleware";
-import { defaultLocale, locales } from "./i18n";
-
-export default createMiddleware({
-  locales,
-  defaultLocale,
-  localePrefix: "as-needed",
-});
-
-export const config = {
-  matcher: ["/((?!api|_next|.*\\..*).*)"],
-};
+// Locale routing disabled — Arabic is the only shipping locale and
+// pages live at the root (not under [locale]/). Re-introduce
+// next-intl/middleware + an [locale] segment when English ships.
+export const config = { matcher: [] };

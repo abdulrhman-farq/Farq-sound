@@ -3,7 +3,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { use } from "react";
 
 import { api } from "@/lib/api";
 import { WaveformPlayer } from "@/components/waveform-player";
@@ -12,9 +11,9 @@ import { formatSAR } from "@/lib/utils";
 export default function SongDetailPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: { slug: string };
 }) {
-  const { slug } = use(params);
+  const { slug } = params;
   const t = useTranslations();
   const router = useRouter();
 
@@ -26,9 +25,18 @@ export default function SongDetailPage({
   const start = useMutation({
     mutationFn: async () => {
       if (!song) throw new Error("no song");
-      // Empty names placeholder — the wizard fills them in.
-      const order = await api.createOrder(song.id, {});
-      return order;
+      try {
+        const order = await api.createOrder(song.id, {});
+        return { id: order.id };
+      } catch {
+        // Demo / offline mode — invent a local order id and remember the song.
+        const id = `demo-${crypto.randomUUID()}`;
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(`farq:order:${id}`, song.id);
+          window.localStorage.setItem(`farq:order:${id}:slug`, song.slug);
+        }
+        return { id };
+      }
     },
     onSuccess: (order) => router.push(`/customize/${order.id}`),
   });

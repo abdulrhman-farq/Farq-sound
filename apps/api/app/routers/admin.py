@@ -9,11 +9,15 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+import tempfile
+from pathlib import Path
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.auth import CurrentAdmin
 from app.db import service
+from app.services.tts import VoiceCloneRequest, get_tts_provider
 
 router = APIRouter()
 
@@ -79,6 +83,77 @@ def patch_intake(
     if not row:
         raise HTTPException(404, "Intake not found.")
     return row[0]
+
+
+@router.post("/intake/{intake_id}/train-voice")
+async def train_voice(
+    intake_id: UUID,
+    _: CurrentAdmin,
+    name: str = Form(...),
+    description: str | None = Form(default=None),
+    files: list[UploadFile] = File(...),
+) -> dict:
+    """Upload 1+ vocal sample WAVs and create a cloned voice.
+
+    Returns {voice_id, voice_engine}. The caller should store these on
+    the published song row (or pass to /publish).
+    """
+    intake = (
+        service()
+        .table("catalog_intake")
+        .select("id")
+        .eq("id", str(intake_id))
+        .single()
+        .execute()
+    ).data
+    if not intake:
+        raise HTTPException(404, "Intake not found.")
+    if not files:
+        raise HTTPException(400, "At least one sample file is required.")
+
+    provider = get_tts_provider()
+    if not provider.supports_cloning:
+        raise HTTPException(
+            501, f"Provider {provider.name!r} does not support cloning."
+        )
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="farq_clone_"))
+    sample_paths: list[Path] = []
+    try:
+        for idx, upload in enumerate(files):
+            suffix = Path(upload.filename or f"sample_{idx}.wav").suffix or ".wav"
+            dest = tmpdir / f"sample_{idx}{suffix}"
+            content = await upload.read()
+            if not content:
+                raise HTTPException(400, f"Empty file: {upload.filename!r}")
+            dest.write_bytes(content)
+            sample_paths.append(dest)
+
+        result = provider.clone_voice(
+            VoiceCloneRequest(
+                name=name,
+                sample_paths=sample_paths,
+                description=description,
+            )
+        )
+    finally:
+        for p in sample_paths:
+            p.unlink(missing_ok=True)
+        try:
+            tmpdir.rmdir()
+        except OSError:
+            pass
+
+    # Persist on the intake row so reviewers can re-use it on publish.
+    service().table("catalog_intake").update(
+        {"voice_model_id": result.voice_id, "voice_engine": provider.name}
+    ).eq("id", str(intake_id)).execute()
+
+    return {
+        "voice_id": result.voice_id,
+        "voice_engine": provider.name,
+        "name": result.name,
+    }
 
 
 @router.post("/intake/{intake_id}/publish")

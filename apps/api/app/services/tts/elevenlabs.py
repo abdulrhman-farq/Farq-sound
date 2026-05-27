@@ -19,11 +19,18 @@ from tenacity import (
     wait_exponential,
 )
 
-from .base import TTSProvider, TTSRequest, TTSResult
+from .base import (
+    TTSProvider,
+    TTSRequest,
+    TTSResult,
+    VoiceCloneRequest,
+    VoiceCloneResult,
+)
 
 
 class ElevenLabsProvider(TTSProvider):
     name = "elevenlabs"
+    supports_cloning = True
     sample_rate = 44_100
     base_url = "https://api.elevenlabs.io/v1"
 
@@ -80,3 +87,30 @@ class ElevenLabsProvider(TTSProvider):
             sample_rate=self.sample_rate,
             duration_ms=duration_ms,
         )
+
+    @retry(
+        retry=retry_if_exception_type(httpx.HTTPError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        reraise=True,
+    )
+    def clone_voice(self, request: VoiceCloneRequest) -> VoiceCloneResult:
+        """Instant Voice Clone via POST /v1/voices/add (multipart)."""
+        url = f"{self.base_url}/voices/add"
+        files = [
+            ("files", (p.name, open(p, "rb"), "audio/wav"))
+            for p in request.sample_paths
+        ]
+        data: dict[str, str] = {"name": request.name}
+        if request.description:
+            data["description"] = request.description
+        headers = {"xi-api-key": self.api_key}
+        try:
+            with httpx.Client(timeout=120) as client:
+                r = client.post(url, data=data, files=files, headers=headers)
+                r.raise_for_status()
+                body = r.json()
+        finally:
+            for _, (_, fh, _) in files:
+                fh.close()
+        return VoiceCloneResult(voice_id=body["voice_id"], name=request.name)

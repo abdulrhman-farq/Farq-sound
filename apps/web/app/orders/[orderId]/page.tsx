@@ -3,17 +3,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { use } from "react";
-
 import { api } from "@/lib/api";
 import { WaveformPlayer } from "@/components/waveform-player";
 
 export default function OrderDetail({
   params,
 }: {
-  params: Promise<{ orderId: string }>;
+  params: { orderId: string };
 }) {
-  const { orderId } = use(params);
+  const { orderId } = params;
   const t = useTranslations();
 
   const { data: order } = useQuery({

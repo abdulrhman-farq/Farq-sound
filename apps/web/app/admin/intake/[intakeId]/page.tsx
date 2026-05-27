@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { supabaseBrowser } from "@/lib/api";
+import { isSupabaseConfigured, supabaseBrowser } from "@/lib/api";
 
 type Segment = {
   role: string;
@@ -28,10 +28,10 @@ const ROLES = [
 export default function IntakeReview({
   params,
 }: {
-  params: Promise<{ intakeId: string }>;
+  params: { intakeId: string };
 }) {
-  const { intakeId } = use(params);
-  const supabase = supabaseBrowser();
+  const { intakeId } = params;
+  const supabase = isSupabaseConfigured() ? supabaseBrowser() : null;
   const qc = useQueryClient();
   const apiBase =
     process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -56,8 +56,9 @@ export default function IntakeReview({
 
   const save = useMutation({
     mutationFn: async () => {
-      const token = (await supabase.auth.getSession()).data.session
-        ?.access_token;
+      const token = supabase
+        ? (await supabase.auth.getSession()).data.session?.access_token
+        : null;
       const r = await fetch(`${apiBase}/api/admin/intake/${intakeId}`, {
         method: "PATCH",
         headers: {

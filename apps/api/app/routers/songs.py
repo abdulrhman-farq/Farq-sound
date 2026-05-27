@@ -6,6 +6,12 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 
 from app.db import anon
+from app.demo_catalog import (
+    get_segments as demo_segments,
+    get_song_by_slug as demo_song,
+    is_demo_mode,
+    list_songs as demo_list,
+)
 from app.schemas import SongDetail, SongSegment, SongSummary
 
 router = APIRouter()
@@ -16,6 +22,8 @@ def list_songs(
     era: Literal["classic", "modern"] | None = None,
     search: str | None = Query(None, min_length=1, max_length=64),
 ) -> list[SongSummary]:
+    if is_demo_mode():
+        return [SongSummary.model_validate(r) for r in demo_list(era, search)]
     q = anon().table("songs").select(
         "id, slug, title_ar, title_en, artist_ar, era, "
         "duration_seconds, preview_url, cover_image_url, price_sar"
@@ -30,6 +38,17 @@ def list_songs(
 
 @router.get("/{slug}", response_model=SongDetail)
 def get_song(slug: str) -> SongDetail:
+    if is_demo_mode():
+        row = demo_song(slug)
+        if not row:
+            raise HTTPException(404, "Song not found.")
+        segments = [SongSegment.model_validate(s) for s in demo_segments(row["id"])]
+        required_roles = sorted({s.role for s in segments})
+        return SongDetail(
+            **row,
+            segments=segments,
+            required_roles=required_roles,  # type: ignore[arg-type]
+        )
     song_row = (
         anon()
         .table("songs")

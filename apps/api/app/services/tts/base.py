@@ -22,9 +22,29 @@ class TTSResult:
     duration_ms: int
 
 
+@dataclass
+class VoiceCloneRequest:
+    name: str
+    sample_paths: list[Path]
+    description: str | None = None
+
+
+@dataclass
+class VoiceCloneResult:
+    voice_id: str
+    name: str
+
+
 class TTSProvider(ABC):
     name: str = "abstract"
+    supports_cloning: bool = False
 
     @abstractmethod
     def synthesize(self, request: TTSRequest, out_path: Path) -> TTSResult:
         """Render `text_ar` in `voice_model_id`'s voice and write WAV to disk."""
+
+    def clone_voice(self, request: VoiceCloneRequest) -> VoiceCloneResult:
+        """Create a cloned voice from samples. Override in providers that support it."""
+        raise NotImplementedError(
+            f"Provider {self.name!r} does not support voice cloning."
+        )

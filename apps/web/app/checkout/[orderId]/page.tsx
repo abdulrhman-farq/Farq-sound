@@ -2,17 +2,15 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { use } from "react";
-
 import { api } from "@/lib/api";
 import { formatSAR } from "@/lib/utils";
 
 export default function CheckoutPage({
   params,
 }: {
-  params: Promise<{ orderId: string }>;
+  params: { orderId: string };
 }) {
-  const { orderId } = use(params);
+  const { orderId } = params;
   const t = useTranslations();
 
   const { data: order } = useQuery({

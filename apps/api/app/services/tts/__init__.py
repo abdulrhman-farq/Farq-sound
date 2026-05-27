@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from app.config import get_settings
 
-from .base import TTSProvider, TTSRequest, TTSResult
+from .base import (
+    TTSProvider,
+    TTSRequest,
+    TTSResult,
+    VoiceCloneRequest,
+    VoiceCloneResult,
+)
 from .elevenlabs import ElevenLabsProvider
 from .mock import MockTTSProvider
 
@@ -28,5 +34,7 @@ __all__ = [
     "TTSProvider",
     "TTSRequest",
     "TTSResult",
+    "VoiceCloneRequest",
+    "VoiceCloneResult",
     "get_tts_provider",
 ]

@@ -5,15 +5,17 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { type Order, supabaseBrowser } from "@/lib/api";
+import { isSupabaseConfigured, type Order, supabaseBrowser } from "@/lib/api";
 
 export default function OrdersPage() {
   const t = useTranslations();
-  const supabase = supabaseBrowser();
+  const configured = isSupabaseConfigured();
+  const supabase = configured ? supabaseBrowser() : null;
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ["orders", "mine"],
     queryFn: async () => {
+      if (!supabase) return [] as Order[];
       const { data, error } = await supabase
         .from("orders")
         .select("*")
@@ -21,12 +23,26 @@ export default function OrdersPage() {
       if (error) throw error;
       return (data ?? []) as Order[];
     },
+    enabled: !!supabase,
   });
 
   const [userId, setUserId] = useState<string | null>(null);
   useEffect(() => {
+    if (!supabase) return;
     supabase.auth.getUser().then((u) => setUserId(u.data.user?.id ?? null));
   }, [supabase]);
+
+  if (!configured) {
+    return (
+      <div className="container py-12 max-w-xl text-center">
+        <h1 className="font-display text-2xl mb-3">{t("orders.title")}</h1>
+        <p className="text-muted-foreground">
+          هذه الصفحة تتطلب تسجيل الدخول، وهو غير مفعّل في وضع المعاينة. أضف
+          مفاتيح Supabase في <code>apps/web/.env.local</code> لتفعيلها.
+        </p>
+      </div>
+    );
+  }
 
   if (!userId) {
     return (

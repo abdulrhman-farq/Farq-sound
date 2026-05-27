@@ -80,13 +80,34 @@ export interface OrderWithJobs extends Order {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-export const supabaseBrowser = () =>
-  createBrowserClient(
+async function safeReq<T>(path: string, init: RequestInit = {}): Promise<T | null> {
+  try {
+    return await req<T>(path, init);
+  } catch {
+    return null;
+  }
+}
+
+export const isSupabaseConfigured = () =>
+  Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  );
+
+export const supabaseBrowser = () => {
+  if (!isSupabaseConfigured()) {
+    throw new Error(
+      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in apps/web/.env.local.",
+    );
+  }
+  return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
+};
 
 async function authHeaders(): Promise<HeadersInit> {
+  if (!isSupabaseConfigured()) return {};
   const supabase = supabaseBrowser();
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -110,15 +131,24 @@ async function req<T>(
   return res.json() as Promise<T>;
 }
 
+import { demoCatalog } from "./demo-catalog";
+
 export const api = {
-  listSongs: (params?: { era?: "classic" | "modern"; search?: string }) => {
+  listSongs: async (params?: { era?: "classic" | "modern"; search?: string }) => {
     const qs = new URLSearchParams();
     if (params?.era) qs.set("era", params.era);
     if (params?.search) qs.set("search", params.search);
     const s = qs.toString();
-    return req<SongSummary[]>(`/api/songs${s ? `?${s}` : ""}`);
+    const live = await safeReq<SongSummary[]>(`/api/songs${s ? `?${s}` : ""}`);
+    return live ?? demoCatalog.list(params);
   },
-  getSong: (slug: string) => req<SongDetail>(`/api/songs/${slug}`),
+  getSong: async (slug: string) => {
+    const live = await safeReq<SongDetail>(`/api/songs/${slug}`);
+    if (live) return live;
+    const demo = demoCatalog.get(slug);
+    if (!demo) throw new Error("Song not found");
+    return demo;
+  },
   createOrder: (song_id: string, names: Partial<Record<Role, string>>) =>
     req<Order>("/api/orders", {
       method: "POST",

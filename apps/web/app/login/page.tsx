@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { supabaseBrowser } from "@/lib/api";
+import { isSupabaseConfigured, supabaseBrowser } from "@/lib/api";
 
 export default function LoginPage() {
   const t = useTranslations();
-  const supabase = supabaseBrowser();
+  const configured = isSupabaseConfigured();
+  const supabase = configured ? supabaseBrowser() : null;
   const [phone, setPhone] = useState("+9665");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -15,6 +16,10 @@ export default function LoginPage() {
   const [working, setWorking] = useState(false);
 
   const sendOtp = async () => {
+    if (!supabase) {
+      setError("الدخول غير مفعّل في وضع المعاينة. أضف مفاتيح Supabase في apps/web/.env.local");
+      return;
+    }
     setWorking(true);
     setError("");
     const { error } = await supabase.auth.signInWithOtp({ phone });
@@ -24,6 +29,7 @@ export default function LoginPage() {
   };
 
   const verifyOtp = async () => {
+    if (!supabase) return;
     setWorking(true);
     setError("");
     const { error } = await supabase.auth.verifyOtp({
@@ -42,6 +48,12 @@ export default function LoginPage() {
       <p className="text-muted-foreground mb-8">
         نرسلك رمز تحقق عبر SMS — جوالك بصيغة +9665XXXXXXXX.
       </p>
+
+      {!configured && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          وضع المعاينة: مفاتيح Supabase غير مضبوطة، لذا الدخول معطّل مؤقتًا. تقدر تتصفّح الكتالوج بدون تسجيل دخول.
+        </div>
+      )}
 
       {step === "phone" ? (
         <>

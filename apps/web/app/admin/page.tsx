@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
-import { supabaseBrowser } from "@/lib/api";
+import { isSupabaseConfigured, supabaseBrowser } from "@/lib/api";
 
 interface Intake {
   id: string;
@@ -14,10 +14,12 @@ interface Intake {
 }
 
 export default function AdminConsole() {
-  const supabase = supabaseBrowser();
+  const configured = isSupabaseConfigured();
+  const supabase = configured ? supabaseBrowser() : null;
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "intake"],
     queryFn: async () => {
+      if (!supabase) return [] as Intake[];
       const { data, error } = await supabase
         .from("catalog_intake")
         .select("*")
@@ -25,7 +27,20 @@ export default function AdminConsole() {
       if (error) throw error;
       return (data ?? []) as Intake[];
     },
+    enabled: !!supabase,
   });
+
+  if (!configured) {
+    return (
+      <div className="container py-12 max-w-2xl">
+        <h1 className="font-display text-3xl mb-2">Admin Console</h1>
+        <p className="text-muted-foreground">
+          Admin requires Supabase. Set NEXT_PUBLIC_SUPABASE_URL and
+          NEXT_PUBLIC_SUPABASE_ANON_KEY in apps/web/.env.local to enable.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="container py-12 max-w-5xl">

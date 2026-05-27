@@ -23,9 +23,9 @@ async function getShared(token: string): Promise<Shared | null> {
 export default async function SharePage({
   params,
 }: {
-  params: Promise<{ token: string }>;
+  params: { token: string };
 }) {
-  const { token } = await params;
+  const { token } = params;
   const t = await getTranslations();
   const data = await getShared(token);
 
