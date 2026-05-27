@@ -1,0 +1,72 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# misc
+.DS_Store
+*.pem
+.vscode/
+.idea/
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env files
+.env
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# turbo
+.turbo
+
+# storage / runtime artifacts
+storage/
+tmp/
+*.wav
+*.mp3
+!apps/web/public/samples/*.mp3
+!apps/api/tests/fixtures/*.wav
+
+# supabase local
+supabase/.branches
+supabase/.temp
+
+# coverage
+coverage/
+.nyc_output/
+
+# OS
+Thumbs.db

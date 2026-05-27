@@ -1,0 +1,21 @@
+{
+  "name": "farq-sound",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Farq Sound — AI-personalized Arabic wedding songs (زفّات).",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm --filter web typecheck",
+    "types:gen": "datamodel-codegen --input apps/api/openapi.json --input-file-type openapi --output packages/types/src/api.ts"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

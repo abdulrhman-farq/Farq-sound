@@ -1,0 +1,121 @@
+{
+  "brand": {
+    "name": "Farq Sound",
+    "tagline": "Your wedding song, in your names"
+  },
+  "nav": {
+    "songs": "Catalog",
+    "orders": "My orders",
+    "login": "Sign in",
+    "signOut": "Sign out"
+  },
+  "home": {
+    "heroTitle": "Your wedding song, in your names",
+    "heroSubtitle": "Pick your favorite zaffa, type your family names, and get your personalized version in minutes.",
+    "heroCta": "Browse the catalog",
+    "beforeLabel": "Original",
+    "afterLabel": "Personalized",
+    "featuredTitle": "Featured zaffas",
+    "stepsTitle": "Three simple steps",
+    "steps": {
+      "one": { "title": "Choose", "body": "Pick a zaffa from the licensed catalog." },
+      "two": { "title": "Name it", "body": "Bride, groom, mother, father — in Arabic." },
+      "three": { "title": "Receive", "body": "Free preview in a minute, final after payment." }
+    },
+    "trustTitle": "Accepted payment methods"
+  },
+  "songs": {
+    "title": "Catalog",
+    "filters": {
+      "era": "Era",
+      "all": "All",
+      "classic": "Classic",
+      "modern": "Modern",
+      "search": "Search for a zaffa..."
+    },
+    "preview": "Listen",
+    "personalize": "Personalize this zaffa",
+    "priceFrom": "From",
+    "sar": "SAR"
+  },
+  "song": {
+    "segmentsTitle": "Names sung in this zaffa",
+    "roles": {
+      "groom": "Groom name",
+      "bride": "Bride name",
+      "mother_of_groom": "Groom's mother",
+      "father_of_groom": "Groom's father",
+      "mother_of_bride": "Bride's mother",
+      "father_of_bride": "Bride's father",
+      "family_name": "Family name"
+    }
+  },
+  "customize": {
+    "title": "Enter your names",
+    "step": "Step {current} of {total}",
+    "next": "Next",
+    "prev": "Back",
+    "submit": "Render preview",
+    "namePlaceholder": "Type the name in Arabic",
+    "phoneticHint": "Hear it pronounced before we render",
+    "tryPreview": "Hear how it sounds",
+    "loadingPreview": "Cloning the voice...",
+    "validation": {
+      "required": "This field is required",
+      "arabicOnly": "Please use Arabic characters",
+      "length": "Name must be 2–40 characters"
+    }
+  },
+  "preview": {
+    "title": "Preview",
+    "stages": {
+      "tts": "Recording the names in the singer's voice...",
+      "pitch_match": "Matching pitch and tempo...",
+      "splice": "Splicing names into the zaffa...",
+      "mixdown": "Mixing vocals with the music...",
+      "master": "Adding the final polish..."
+    },
+    "ready": "Your preview is ready — listen before you continue.",
+    "watermarkNote": "Preview has a soft watermark voice. The final version is clean.",
+    "accept": "Love it — give me the final version",
+    "edit": "Edit names"
+  },
+  "checkout": {
+    "title": "Checkout",
+    "summary": "Order summary",
+    "songLabel": "Zaffa",
+    "total": "Total",
+    "pay": "Pay now",
+    "mockNote": "Mock mode — click pay to complete without any real transfer.",
+    "secure": "Secure payment via Moyasar"
+  },
+  "orders": {
+    "title": "My orders",
+    "empty": "No orders yet.",
+    "status": {
+      "draft": "Draft",
+      "rendering": "Rendering",
+      "preview_ready": "Preview ready",
+      "paid": "Paid — preparing",
+      "delivered": "Delivered",
+      "failed": "Failed"
+    },
+    "download": "Download",
+    "share": "Share",
+    "retry": "Retry"
+  },
+  "share": {
+    "headline": "{couple}'s zaffa",
+    "cta": "Get yours, too"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "notFound": "We couldn't find what you're looking for."
+  },
+  "common": {
+    "loading": "Loading...",
+    "play": "Play",
+    "pause": "Pause",
+    "back": "Back"
+  }
+}

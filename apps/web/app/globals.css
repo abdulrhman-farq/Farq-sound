@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-ivory text-navy font-arabic antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: theme("colors.gold.500");
+    color: theme("colors.ivory.DEFAULT");
+  }
+  /* Ornament rule used in section headings */
+  .ornament {
+    @apply inline-flex items-center gap-3 text-gold;
+  }
+  .ornament::before,
+  .ornament::after {
+    content: "";
+    @apply block w-12 h-px bg-gold;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3
+           rounded-md font-medium transition-colors
+           focus-visible:outline-none focus-visible:ring-2
+           focus-visible:ring-gold disabled:opacity-50
+           disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-navy text-ivory hover:bg-navy/90;
+  }
+  .btn-accent {
+    @apply btn bg-gold text-navy hover:bg-gold/90;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-navy hover:bg-ivory-200;
+  }
+  .card {
+    @apply rounded-lg border border-border bg-ivory-50 p-6 shadow-sm;
+  }
+  .input {
+    @apply w-full rounded-md border border-border bg-ivory-50 px-4 py-3
+           text-lg text-navy placeholder:text-muted-foreground
+           focus:outline-none focus:ring-2 focus:ring-gold;
+  }
+  .label {
+    @apply block text-sm font-medium text-navy mb-2;
+  }
+  .heading-display {
+    @apply font-display text-4xl md:text-6xl leading-tight tracking-tight;
+  }
+}
