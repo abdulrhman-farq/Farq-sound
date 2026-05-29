@@ -13,11 +13,17 @@ this thing actually works" path.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Annotated
 
 import jwt
 from fastapi import Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 from app.config import get_settings
 
@@ -82,8 +88,14 @@ def require_user(
         request.state.user = user
         return user
 
-    # Path 2 — guest device id (any UUID-ish string of 16+ chars)
-    if x_device_id and len(x_device_id) >= 16:
+    # Path 2 — guest device id (must be a valid UUID; matches what
+    # crypto.randomUUID() emits in the browser).
+    if x_device_id:
+        if not _UUID_RE.match(x_device_id):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "X-Device-Id must be a UUID (e.g. crypto.randomUUID()).",
+            )
         _ensure_guest_profile(x_device_id)
         user = AuthUser(id=x_device_id, role="guest")
         request.state.user = user
