@@ -1,0 +1,9 @@
+# Worker-only audio pipeline dependencies.
+# Installed on top of the shared requirements.txt in the worker Docker
+# image. The web API doesn't need these — keeps its image small and
+# its cold start fast.
+
+librosa==0.10.2.post1
+pyrubberband==0.4.0
+audioread==3.0.1
+scipy==1.14.1
