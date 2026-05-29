@@ -207,7 +207,9 @@ def run_render_chain(
             )
             if mode == "preview":
                 wm = Path(__file__).resolve().parents[2] / "assets" / "watermark.wav"
-                add_preview_watermark(mp3, wm, mp3)
+                stamped = work / "preview-stamped.mp3"
+                add_preview_watermark(mp3, wm, stamped)
+                mp3 = stamped  # serve the watermarked version
 
             # Upload + sign.
             key = f"orders/{order_id}/{mp3.name}"
