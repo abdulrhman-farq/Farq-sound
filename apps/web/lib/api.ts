@@ -106,12 +106,36 @@ export const supabaseBrowser = () => {
   );
 };
 
+// Stable per-browser device id — gives every guest visitor a real
+// identity on the backend without forcing a signup. Persists across
+// reloads via localStorage.
+const DEVICE_ID_KEY = "farq:device-id";
+
+export function getDeviceId(): string {
+  if (typeof window === "undefined") return "";
+  let id = window.localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    window.localStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
 async function authHeaders(): Promise<HeadersInit> {
-  if (!isSupabaseConfigured()) return {};
-  const supabase = supabaseBrowser();
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // Prefer a Supabase session if present (post-login flow).
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = supabaseBrowser();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) return { Authorization: `Bearer ${token}` };
+    } catch {
+      // fall through to guest mode
+    }
+  }
+  // Guest mode — stable device id, backend creates a synthetic profile.
+  const deviceId = getDeviceId();
+  return deviceId ? { "X-Device-Id": deviceId } : {};
 }
 
 async function req<T>(

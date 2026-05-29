@@ -1,9 +1,9 @@
 """Order lifecycle endpoints.
 
-All user-scoped queries go through `UserDB` (RLS-respecting). The
-`service()` client is reserved for share-token lookups and webhook
-mutations where the caller has already been authenticated by another
-means (HMAC signature, public token).
+Uses `service()` (bypasses RLS) and enforces ownership in code via
+.eq("user_id", user.id). This is required because guest sessions don't
+have JWTs and so can't apply RLS — we still maintain strict per-user
+isolation via the application-level filter on every read/write.
 """
 import secrets
 from uuid import UUID
@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.auth import CurrentUser
-from app.db import UserDB, service
+from app.db import service
 from app.schemas import (
     CheckoutResponse,
     CreateOrderRequest,
@@ -38,14 +38,12 @@ class UpdateNamesRequest(BaseModel):
 
 
 @router.post("", response_model=OrderRead)
-@limiter.limit("10/hour")
+@limiter.limit("20/hour")
 def create_order(
     request: Request,
     req: CreateOrderRequest,
     user: CurrentUser,
-    db: UserDB,
 ) -> OrderRead:
-    # Validate song exists (public table, anon-readable).
     song = (
         service()
         .table("songs")
@@ -65,7 +63,7 @@ def create_order(
         "amount_sar": song["price_sar"],
         "share_token": _share_token(),
     }
-    row = (db.table("orders").insert(insert).execute()).data[0]
+    row = (service().table("orders").insert(insert).execute()).data[0]
     return OrderRead.model_validate(row)
 
 
@@ -74,12 +72,13 @@ def update_names(
     order_id: UUID,
     req: UpdateNamesRequest,
     user: CurrentUser,
-    db: UserDB,
 ) -> OrderRead:
     row = (
-        db.table("orders")
-        .select("id, status")
+        service()
+        .table("orders")
+        .select("id, status, user_id")
         .eq("id", str(order_id))
+        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -88,20 +87,24 @@ def update_names(
     if row["status"] not in ("draft", "preview_ready", "failed"):
         raise HTTPException(409, "Cannot edit names after payment.")
     updated = (
-        db.table("orders")
+        service()
+        .table("orders")
         .update({"names": req.names.model_dump(exclude_none=True)})
         .eq("id", str(order_id))
+        .eq("user_id", user.id)
         .execute()
     ).data[0]
     return OrderRead.model_validate(updated)
 
 
 @router.get("/{order_id}", response_model=OrderWithJobs)
-def get_order(order_id: UUID, user: CurrentUser, db: UserDB) -> OrderWithJobs:
+def get_order(order_id: UUID, user: CurrentUser) -> OrderWithJobs:
     row = (
-        db.table("orders")
+        service()
+        .table("orders")
         .select("*")
         .eq("id", str(order_id))
+        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -109,7 +112,8 @@ def get_order(order_id: UUID, user: CurrentUser, db: UserDB) -> OrderWithJobs:
         raise HTTPException(404, "Order not found.")
 
     jobs_rows = (
-        db.table("render_jobs")
+        service()
+        .table("render_jobs")
         .select("*")
         .eq("order_id", str(order_id))
         .order("started_at", desc=False)
@@ -120,13 +124,13 @@ def get_order(order_id: UUID, user: CurrentUser, db: UserDB) -> OrderWithJobs:
 
 
 @router.post("/{order_id}/render-preview", response_model=OrderRead)
-def render_preview(
-    order_id: UUID, user: CurrentUser, db: UserDB
-) -> OrderRead:
+def render_preview(order_id: UUID, user: CurrentUser) -> OrderRead:
     row = (
-        db.table("orders")
+        service()
+        .table("orders")
         .select("*")
         .eq("id", str(order_id))
+        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -138,9 +142,11 @@ def render_preview(
         )
 
     updated = (
-        db.table("orders")
+        service()
+        .table("orders")
         .update({"status": "rendering", "error_message": None})
         .eq("id", str(order_id))
+        .eq("user_id", user.id)
         .execute()
     ).data[0]
 
@@ -151,13 +157,13 @@ def render_preview(
 
 
 @router.post("/{order_id}/checkout", response_model=CheckoutResponse)
-def checkout(
-    order_id: UUID, user: CurrentUser, db: UserDB
-) -> CheckoutResponse:
+def checkout(order_id: UUID, user: CurrentUser) -> CheckoutResponse:
     row = (
-        db.table("orders")
+        service()
+        .table("orders")
         .select("id, user_id, status, amount_sar")
         .eq("id", str(order_id))
+        .eq("user_id", user.id)
         .single()
         .execute()
     ).data
@@ -167,7 +173,8 @@ def checkout(
         raise HTTPException(409, "Order is not ready for checkout.")
 
     profile = (
-        db.table("profiles")
+        service()
+        .table("profiles")
         .select("phone")
         .eq("id", user.id)
         .single()
@@ -188,9 +195,9 @@ def checkout(
             customer_phone=profile.get("phone"),
         )
     )
-    db.table("orders").update(
+    service().table("orders").update(
         {"moyasar_payment_id": session.payment_id}
-    ).eq("id", str(order_id)).execute()
+    ).eq("id", str(order_id)).eq("user_id", user.id).execute()
     return CheckoutResponse(
         payment_url=session.payment_url,
         payment_id=session.payment_id,
@@ -199,7 +206,7 @@ def checkout(
 
 
 @router.post("/preview-name", response_model=SampleNamePreviewResponse)
-@limiter.limit("30/hour")
+@limiter.limit("60/hour")
 def preview_name(
     request: Request,
     req: SampleNamePreviewRequest,

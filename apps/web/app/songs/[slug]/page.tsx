@@ -25,18 +25,10 @@ export default function SongDetailPage({
   const start = useMutation({
     mutationFn: async () => {
       if (!song) throw new Error("no song");
-      try {
-        const order = await api.createOrder(song.id, {});
-        return { id: order.id };
-      } catch {
-        // Demo / offline mode — invent a local order id and remember the song.
-        const id = `demo-${crypto.randomUUID()}`;
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(`farq:order:${id}`, song.id);
-          window.localStorage.setItem(`farq:order:${id}:slug`, song.slug);
-        }
-        return { id };
-      }
+      // Guest mode is auto-applied by api.ts via X-Device-Id, so this
+      // always creates a real backend order even without login.
+      const order = await api.createOrder(song.id, {});
+      return { id: order.id };
     },
     onSuccess: (order) => router.push(`/customize/${order.id}`),
   });
