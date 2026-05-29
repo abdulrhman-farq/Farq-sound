@@ -205,8 +205,18 @@ def write_preview(song_dir: Path, public_samples: Path, slug: str) -> None:
 
 
 def main() -> None:
-    storage_root = Path(__file__).resolve().parents[1] / "storage" / "songs"
-    public_root = Path(__file__).resolve().parents[3] / "apps" / "web" / "public" / "samples"
+    here = Path(__file__).resolve()
+    storage_root = here.parents[1] / "storage" / "songs"
+
+    # Public previews exist only inside the dev monorepo. In the worker
+    # Docker image __file__ is at /app/assets/ so parents[3] is undefined.
+    public_root: Path | None = None
+    try:
+        candidate = here.parents[3] / "apps" / "web" / "public" / "samples"
+        if candidate.parent.parent.exists():
+            public_root = candidate
+    except IndexError:
+        public_root = None
 
     # Each song's `name_slots` matches its rows in supabase/seed.sql
     # (sequence_index, start_ms, end_ms — converted to seconds).
@@ -228,10 +238,6 @@ def main() -> None:
         },
     ]
 
-    # Public previews are only needed in the dev monorepo. Inside the
-    # worker image there is no apps/web — skip silently in that case.
-    has_public_root = public_root.parent.parent.exists()
-
     for s in songs:
         d = storage_root / s["slug"]
         write_song(
@@ -241,7 +247,7 @@ def main() -> None:
             root_hz=s["root_hz"],
             name_slots=s["name_slots"],
         )
-        if has_public_root:
+        if public_root is not None:
             try:
                 write_preview(d, public_root, s["slug"])
             except Exception as exc:
@@ -249,7 +255,8 @@ def main() -> None:
         print(f"  ✓ {s['slug']} → Hijaz @ {s['bpm']} BPM, {len(s['name_slots'])} name slots")
 
     print(f"\nstorage : {storage_root}")
-    print(f"previews: {public_root}")
+    if public_root:
+        print(f"previews: {public_root}")
 
 
 if __name__ == "__main__":
