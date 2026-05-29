@@ -15,6 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY apps/api/app /app/app
 COPY apps/api/assets /app/assets
 
+# Bake the placeholder Hijaz/daff demo catalog into the image so the
+# rendering pipeline has real WAVs to slice + mix from. Replace via the
+# admin intake flow once licensed material is available.
+RUN python /app/assets/make_demo_audio.py && ls -la /app/storage/songs/
+
 ENV PYTHONUNBUFFERED=1 \
     STORAGE_ROOT=/storage
 

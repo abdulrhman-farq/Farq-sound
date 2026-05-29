@@ -228,6 +228,10 @@ def main() -> None:
         },
     ]
 
+    # Public previews are only needed in the dev monorepo. Inside the
+    # worker image there is no apps/web — skip silently in that case.
+    has_public_root = public_root.parent.parent.exists()
+
     for s in songs:
         d = storage_root / s["slug"]
         write_song(
@@ -237,7 +241,11 @@ def main() -> None:
             root_hz=s["root_hz"],
             name_slots=s["name_slots"],
         )
-        write_preview(d, public_root, s["slug"])
+        if has_public_root:
+            try:
+                write_preview(d, public_root, s["slug"])
+            except Exception as exc:
+                print(f"  ! preview-{s['slug']}.mp3 skipped: {exc}")
         print(f"  ✓ {s['slug']} → Hijaz @ {s['bpm']} BPM, {len(s['name_slots'])} name slots")
 
     print(f"\nstorage : {storage_root}")
