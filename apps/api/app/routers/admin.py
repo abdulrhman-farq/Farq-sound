@@ -290,3 +290,52 @@ def clone_voice(
         }
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------
+# One-shot song intake from a URL. Triggers prepare_song_from_url on
+# the worker (Demucs + upsert). Currently un-gated so we can onboard
+# the first real song before a full admin auth flow exists; lock down
+# before any wider exposure (TODO: require CurrentAdmin).
+# ---------------------------------------------------------------------
+class SongIntakeSegment(BaseModel):
+    role: str = "primary_name"
+    start_ms: int
+    end_ms: int
+    original_text_ar: str = ""
+    prosody_note: str = "sung"
+
+
+class SongIntakeRequest(BaseModel):
+    slug: str
+    title_ar: str
+    artist_ar: str = ""
+    era: str = "classic"
+    source_url: str
+    voice_model_id: str
+    segment: SongIntakeSegment
+    rights_status: str = "licensed"
+    price_sar: float = 49
+
+
+@router.post("/songs/intake-from-url")
+def intake_song_from_url(req: SongIntakeRequest) -> dict:
+    if req.segment.end_ms <= req.segment.start_ms:
+        raise HTTPException(400, "segment end_ms must be > start_ms")
+    if req.segment.start_ms <= 0 or req.segment.end_ms <= 0:
+        raise HTTPException(400, "segment timings must be > 0")
+
+    from app.workers.tasks import prepare_song_from_url
+
+    task = prepare_song_from_url.delay(
+        slug=req.slug,
+        title_ar=req.title_ar,
+        artist_ar=req.artist_ar,
+        era=req.era,
+        source_url=req.source_url,
+        voice_model_id=req.voice_model_id,
+        segment=req.segment.model_dump(),
+        rights_status=req.rights_status,
+        price_sar=req.price_sar,
+    )
+    return {"task_id": task.id, "slug": req.slug, "status": "queued"}

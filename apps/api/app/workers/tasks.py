@@ -301,3 +301,106 @@ def run_intake_analysis(intake_id: str) -> dict:
         "detected_segments": [],
     }).eq("id", intake_id).execute()
     return {"intake_id": intake_id, "status": "awaiting_review"}
+
+
+# ---------------------------------------------------------------------
+# One-shot song intake: download source MP3 -> demucs -> upload stems
+# -> upsert songs row + one manual segment. Triggered by the admin
+# endpoint POST /api/admin/songs/intake-from-url so we can onboard
+# `يامرحبا ياكل حاضر` without leaving the production stack.
+# ---------------------------------------------------------------------
+@celery_app.task(bind=True)
+def prepare_song_from_url(
+    self,
+    *,
+    slug: str,
+    title_ar: str,
+    artist_ar: str,
+    era: str,
+    source_url: str,
+    voice_model_id: str,
+    segment: dict,
+    rights_status: str = "licensed",
+    price_sar: float = 49,
+) -> dict:
+    """Download, separate, upload, seed. Returns {song_id, ...}."""
+    import httpx
+
+    from app.services.separation import separate
+    from app.services.storage import upload_audio
+
+    s = get_settings()
+    work = s.storage_root / "intake" / slug
+    work.mkdir(parents=True, exist_ok=True)
+    src = work / "original.mp3"
+
+    log.info("[intake:%s] downloading %s", slug, source_url[:60])
+    with httpx.Client(timeout=120, follow_redirects=True) as client:
+        with client.stream("GET", source_url) as r:
+            r.raise_for_status()
+            with open(src, "wb") as fh:
+                for chunk in r.iter_bytes():
+                    fh.write(chunk)
+    log.info("[intake:%s] downloaded %.1f MB", slug, src.stat().st_size / 1e6)
+
+    vocals, instr = separate(src, work)
+    log.info("[intake:%s] demucs done", slug)
+
+    # Upload stems to Supabase Storage as private signed URLs.
+    base = f"songs/{slug}"
+    vocals_url = upload_audio(vocals, f"{base}/vocals.wav", "audio/wav")
+    instr_url  = upload_audio(instr,  f"{base}/instrumental.wav", "audio/wav")
+    src_url    = upload_audio(src,    f"{base}/original.mp3", "audio/mpeg")
+
+    # Also place the stems at the on-disk paths the renderer expects
+    # via the same path scheme used for demo songs, so the existing
+    # pipeline can read them without a download step at render time.
+    baked_dir = Path("/app/storage/songs") / slug
+    baked_dir.mkdir(parents=True, exist_ok=True)
+    import shutil as _sh
+    _sh.copy(vocals, baked_dir / "vocals.wav")
+    _sh.copy(instr,  baked_dir / "instrumental.wav")
+
+    instrumental_path     = str(baked_dir / "instrumental.wav")
+    isolated_vocals_path  = str(baked_dir / "vocals.wav")
+
+    # Upsert the song row.
+    row = (
+        service().table("songs").upsert({
+            "slug": slug,
+            "title_ar": title_ar,
+            "artist_ar": artist_ar,
+            "era": era,
+            "preview_url": src_url,           # served to users for browsing
+            "full_original_url": src_url,
+            "instrumental_url": instrumental_path,
+            "isolated_vocals_url": isolated_vocals_path,
+            "voice_model_id": voice_model_id,
+            "voice_engine": "elevenlabs",
+            "rights_status": rights_status,
+            "is_active": True,
+            "price_sar": price_sar,
+        }, on_conflict="slug").execute()
+    ).data[0]
+
+    # Clear any old segments, then write the single manual segment.
+    service().table("song_segments").delete().eq(
+        "song_id", row["id"]
+    ).execute()
+    service().table("song_segments").insert({
+        "song_id": row["id"],
+        "role": segment["role"],
+        "sequence_index": 1,
+        "start_ms": int(segment["start_ms"]),
+        "end_ms": int(segment["end_ms"]),
+        "original_text_ar": segment.get("original_text_ar", ""),
+        "prosody_note": segment.get("prosody_note", "sung"),
+    }).execute()
+
+    return {
+        "song_id": row["id"],
+        "slug": slug,
+        "vocals_url": vocals_url,
+        "instrumental_url": instr_url,
+        "baked_at": str(baked_dir),
+    }

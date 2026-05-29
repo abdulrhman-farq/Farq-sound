@@ -10,17 +10,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY apps/api/requirements.txt apps/api/requirements-worker.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-worker.txt
+# Install torch from CPU index first (much smaller than the default CUDA wheels),
+# then everything else.
+RUN pip install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/cpu \
+      --extra-index-url https://pypi.org/simple \
+      torch==2.1.2 torchaudio==2.1.2 \
+ && pip install --no-cache-dir -r requirements.txt -r requirements-worker.txt
 
 COPY apps/api/app /app/app
 COPY apps/api/assets /app/assets
 
 # Bake the placeholder Hijaz/daff demo catalog into the image so the
-# rendering pipeline has real WAVs to slice + mix from. Replace via the
-# admin intake flow once licensed material is available.
+# rendering pipeline has real WAVs to slice + mix from.
 RUN python /app/assets/make_demo_audio.py && ls -la /app/storage/songs/
+
+# Pre-download the htdemucs model weights at build time so the first
+# separation request doesn't waste 30 s on a 80 MB download.
+ENV TORCH_HOME=/app/.cache/torch
+RUN python -c "from demucs.pretrained import get_model; get_model('htdemucs')" \
+ && du -sh $TORCH_HOME 2>/dev/null
 
 ENV PYTHONUNBUFFERED=1 \
     STORAGE_ROOT=/storage
 
-CMD ["celery", "-A", "app.workers.celery_app", "worker", "-l", "info", "--concurrency=1", "--max-memory-per-child=420000"]
+CMD ["celery", "-A", "app.workers.celery_app", "worker", "-l", "info", "--concurrency=1", "--max-memory-per-child=1500000"]
