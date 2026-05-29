@@ -1,104 +1,126 @@
 "use client";
 
-import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { isSupabaseConfigured, supabaseBrowser } from "@/lib/api";
+import { supabaseBrowser } from "@/lib/api";
 
-export default function LoginPage() {
-  const t = useTranslations();
-  const configured = isSupabaseConfigured();
-  const supabase = configured ? supabaseBrowser() : null;
-  const [phone, setPhone] = useState("+9665");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"phone" | "otp">("phone");
+function LoginInner() {
+  const supabase = supabaseBrowser();
+  const router = useRouter();
+  const params = useSearchParams();
+  const returnTo = params.get("returnTo") || "/songs";
+
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">("email");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
 
-  const sendOtp = async () => {
+  const sendCode = async () => {
     if (!supabase) {
-      setError("الدخول غير مفعّل في وضع المعاينة. أضف مفاتيح Supabase في apps/web/.env.local");
+      setError("Supabase غير مفعّل — تأكّدي من متغيّرات البيئة في Vercel.");
       return;
     }
     setWorking(true);
     setError("");
-    const { error } = await supabase.auth.signInWithOtp({ phone });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    });
     setWorking(false);
-    if (error) setError(error.message);
-    else setStep("otp");
+    if (error) return setError(error.message);
+    setStep("code");
   };
 
-  const verifyOtp = async () => {
+  const verifyCode = async () => {
     if (!supabase) return;
     setWorking(true);
     setError("");
     const { error } = await supabase.auth.verifyOtp({
-      phone,
-      token: otp,
-      type: "sms",
+      email,
+      token: code.trim(),
+      type: "email",
     });
     setWorking(false);
     if (error) return setError(error.message);
-    window.location.assign("/songs");
+    router.push(returnTo);
   };
 
   return (
     <div className="container py-16 max-w-md">
-      <h1 className="font-display text-3xl mb-2">{t("nav.login")}</h1>
+      <h1 className="font-display text-3xl mb-2">تسجيل الدخول</h1>
       <p className="text-muted-foreground mb-8">
-        نرسلك رمز تحقق عبر SMS — جوالك بصيغة +9665XXXXXXXX.
+        {step === "email"
+          ? "اكتبي إيميلك، نرسلك رمز تحقق ٦ أرقام."
+          : `أرسلنا رمز إلى ${email} — افتحي إيميلك والصقي الرمز هنا.`}
       </p>
 
-      {!configured && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          وضع المعاينة: مفاتيح Supabase غير مضبوطة، لذا الدخول معطّل مؤقتًا. تقدر تتصفّح الكتالوج بدون تسجيل دخول.
-        </div>
-      )}
-
-      {step === "phone" ? (
+      {step === "email" ? (
         <>
-          <label className="label" htmlFor="phone">رقم الجوال</label>
+          <label className="label" htmlFor="email">البريد الإلكتروني</label>
           <input
-            id="phone"
-            type="tel"
+            id="email"
+            type="email"
             dir="ltr"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
             className="input"
           />
           <button
             type="button"
-            onClick={sendOtp}
-            disabled={working}
+            onClick={sendCode}
+            disabled={working || !email.includes("@")}
             className="btn-primary w-full mt-6"
           >
-            {working ? t("common.loading") : "إرسال الرمز"}
+            {working ? "جاري الإرسال…" : "إرسال الرمز"}
           </button>
         </>
       ) : (
         <>
-          <label className="label" htmlFor="otp">الرمز</label>
+          <label className="label" htmlFor="code">الرمز (٦ أرقام)</label>
           <input
-            id="otp"
+            id="code"
             type="text"
             inputMode="numeric"
+            autoComplete="one-time-code"
             dir="ltr"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="123456"
             className="input tracking-widest text-center text-2xl"
           />
           <button
             type="button"
-            onClick={verifyOtp}
-            disabled={working}
+            onClick={verifyCode}
+            disabled={working || code.length < 6}
             className="btn-accent w-full mt-6"
           >
-            {working ? t("common.loading") : "دخول"}
+            {working ? "جاري التحقق…" : "دخول"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStep("email"); setError(""); setCode(""); }}
+            className="btn-ghost w-full mt-2 text-sm"
+          >
+            تغيير الإيميل
           </button>
         </>
       )}
 
-      {error && <p className="text-red-600 mt-4 text-sm">{error}</p>}
+      {error && (
+        <p className="text-red-600 mt-4 text-sm" dir="ltr">{error}</p>
+      )}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<p className="container py-12">جاري التحميل…</p>}>
+      <LoginInner />
+    </Suspense>
   );
 }
