@@ -40,38 +40,14 @@ export default function CustomizePage({
   const t = useTranslations();
   const router = useRouter();
 
-  const isDemo = orderId.startsWith("demo-");
   const { data: order } = useQuery({
     queryKey: ["order", orderId],
-    queryFn: async () => {
-      if (isDemo) {
-        // Synthesize a fake order from localStorage so the wizard runs
-        // without a backend.
-        const songId = typeof window !== "undefined"
-          ? window.localStorage.getItem(`farq:order:${orderId}`)
-          : null;
-        return {
-          id: orderId,
-          song_id: songId ?? "",
-          status: "draft" as const,
-          names: {},
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-      }
-      return api.getOrder(orderId);
-    },
+    queryFn: () => api.getOrder(orderId),
   });
   const { data: song } = useQuery({
-    queryKey: ["order-song", order?.song_id, orderId],
+    queryKey: ["order-song", order?.song_id],
     queryFn: async () => {
       if (!order) return null;
-      if (isDemo) {
-        const slug = typeof window !== "undefined"
-          ? window.localStorage.getItem(`farq:order:${orderId}:slug`)
-          : null;
-        if (slug) return api.getSong(slug);
-      }
       const songs = await api.listSongs();
       const found = songs.find((s) => s.id === order.song_id);
       if (!found) throw new Error("song not found");
@@ -111,19 +87,8 @@ export default function CustomizePage({
 
   const renderPreview = useMutation({
     mutationFn: async () => {
-      try {
-        await api.updateNames(orderId, values);
-        return await api.renderPreview(orderId);
-      } catch {
-        // Demo / offline mode — persist names client-side and go.
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(
-            `farq:names:${orderId}`,
-            JSON.stringify(values),
-          );
-        }
-        return null;
-      }
+      await api.updateNames(orderId, values);
+      return api.renderPreview(orderId);
     },
     onSuccess: () => router.push(`/preview/${orderId}`),
   });
