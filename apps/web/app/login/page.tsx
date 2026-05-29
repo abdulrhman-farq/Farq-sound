@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 
 import { supabaseBrowser } from "@/lib/api";
 
@@ -44,7 +45,7 @@ function LoginInner() {
     });
     setWorking(false);
     if (error) return setError(error.message);
-    router.push(returnTo);
+    router.push(returnTo as Route);
   };
 
   return (
