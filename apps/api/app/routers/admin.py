@@ -6,11 +6,11 @@ before publish.
 """
 from __future__ import annotations
 
-from typing import Any
-from uuid import UUID
-
+import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -219,3 +219,74 @@ def publish_intake(
     ).eq("id", str(intake_id)).execute()
 
     return {"published_song_id": song_row["id"]}
+
+
+# ---------------------------------------------------------------------
+# Voice cloning — upload singer samples, get back a voice_id.
+# ---------------------------------------------------------------------
+MAX_SAMPLE_BYTES = 25 * 1024 * 1024          # 25 MB per file
+MAX_TOTAL_SAMPLES = 4
+ALLOWED_AUDIO_TYPES = {
+    "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3",
+    "audio/flac", "audio/ogg", "audio/x-m4a",
+}
+
+
+@router.post("/voices")
+def clone_voice(
+    _: CurrentAdmin,
+    name: str = Form(..., min_length=2, max_length=80),
+    description: str | None = Form(default=None, max_length=400),
+    files: list[UploadFile] = File(...),
+) -> dict:
+    """Train a singer voice from uploaded vocal samples.
+
+    Returns `{ voice_id, provider, mode }`. Use the returned `voice_id`
+    as `songs.voice_model_id` when publishing the song.
+
+    The handler validates content type and size, then hands off to the
+    configured TTS provider (ElevenLabs Instant Voice Clone in live
+    mode, deterministic stub in mock mode).
+    """
+    if not files:
+        raise HTTPException(400, "At least one sample is required.")
+    if len(files) > MAX_TOTAL_SAMPLES:
+        raise HTTPException(
+            400, f"At most {MAX_TOTAL_SAMPLES} samples per request."
+        )
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="voicelab-"))
+    saved: list[Path] = []
+    try:
+        for upload in files:
+            if upload.content_type not in ALLOWED_AUDIO_TYPES:
+                raise HTTPException(
+                    400, f"Unsupported file type: {upload.content_type}"
+                )
+            dest = tmp_dir / (upload.filename or "sample.wav")
+            size = 0
+            with open(dest, "wb") as fh:
+                while chunk := upload.file.read(1 << 20):
+                    size += len(chunk)
+                    if size > MAX_SAMPLE_BYTES:
+                        raise HTTPException(
+                            413, "Sample exceeds 25 MB limit."
+                        )
+                    fh.write(chunk)
+            saved.append(dest)
+
+        provider = get_tts_provider()
+        result = provider.clone_voice(
+            VoiceCloneRequest(
+                name=name,
+                description=description,
+                sample_paths=saved,
+            )
+        )
+        return {
+            "voice_id": result.voice_id,
+            "provider": result.provider,
+            "mode": "mock" if result.provider == "mock" else "live",
+        }
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)

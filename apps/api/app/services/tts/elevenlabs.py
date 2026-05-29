@@ -28,6 +28,16 @@ from .base import (
 )
 
 
+def _content_type_for(path: Path) -> str:
+    return {
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/x-m4a",
+    }.get(path.suffix.lower(), "audio/wav")
+
+
 class ElevenLabsProvider(TTSProvider):
     name = "elevenlabs"
     supports_cloning = True
@@ -47,13 +57,8 @@ class ElevenLabsProvider(TTSProvider):
     def synthesize(self, request: TTSRequest, out_path: Path) -> TTSResult:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         url = f"{self.base_url}/text-to-speech/{request.voice_model_id}"
-        # Build text with phonetic hint applied as SSML-style override.
         text = request.text_ar
         if request.phonetic_hint:
-            # ElevenLabs accepts inline pronunciation hints via the
-            # `pronunciation_dictionary_locators` field; for the MVP we
-            # pre-format the text per the hint, which is good enough for
-            # diacritics-driven Arabic pronunciation.
             text = request.phonetic_hint
         payload = {
             "text": text,
@@ -91,26 +96,48 @@ class ElevenLabsProvider(TTSProvider):
     @retry(
         retry=retry_if_exception_type(httpx.HTTPError),
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=8),
+        wait=wait_exponential(multiplier=1, min=2, max=16),
         reraise=True,
     )
     def clone_voice(self, request: VoiceCloneRequest) -> VoiceCloneResult:
-        """Instant Voice Clone via POST /v1/voices/add (multipart)."""
-        url = f"{self.base_url}/voices/add"
-        files = [
-            ("files", (p.name, open(p, "rb"), "audio/wav"))
-            for p in request.sample_paths
-        ]
-        data: dict[str, str] = {"name": request.name}
-        if request.description:
-            data["description"] = request.description
-        headers = {"xi-api-key": self.api_key}
+        """Upload sample audio to ElevenLabs Instant Voice Clone.
+
+        Docs: https://elevenlabs.io/docs/api-reference/voices/add
+        """
+        if not request.sample_paths:
+            raise ValueError("At least one sample file is required.")
+
+        files: list = []
         try:
+            for p in request.sample_paths:
+                files.append(
+                    ("files", (p.name, open(p, "rb"), _content_type_for(p)))
+                )
+            data: dict[str, str] = {"name": request.name}
+            if request.description:
+                data["description"] = request.description
+            headers = {"xi-api-key": self.api_key}
             with httpx.Client(timeout=120) as client:
-                r = client.post(url, data=data, files=files, headers=headers)
+                r = client.post(
+                    f"{self.base_url}/voices/add",
+                    data=data,
+                    files=files,
+                    headers=headers,
+                )
                 r.raise_for_status()
                 body = r.json()
         finally:
             for _, (_, fh, _) in files:
-                fh.close()
-        return VoiceCloneResult(voice_id=body["voice_id"], name=request.name)
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+
+        voice_id = body.get("voice_id")
+        if not voice_id:
+            raise RuntimeError(f"ElevenLabs response missing voice_id: {body}")
+        return VoiceCloneResult(
+            voice_id=voice_id,
+            provider="elevenlabs",
+            name=request.name,
+        )

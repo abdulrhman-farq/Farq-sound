@@ -15,7 +15,7 @@ from app.services.pipeline import (
     slice_reference,
     splice_into_vocals,
 )
-from app.services.tts import TTSRequest
+from app.services.tts import VoiceCloneRequest, TTSRequest
 from app.services.tts.mock import MockTTSProvider
 
 
@@ -100,6 +100,25 @@ def test_splice_replaces_region_with_crossfade(tmp_path: Path) -> None:
         return float(spec[freqs > 400].sum())
 
     assert hf_energy(mid) > hf_energy(edge) * 2
+
+
+def test_mock_clone_voice_is_deterministic(tmp_path: Path) -> None:
+    provider = MockTTSProvider()
+    sample = tmp_path / "sample.wav"
+    _make_tone(sample, duration_s=0.5)
+    r1 = provider.clone_voice(
+        VoiceCloneRequest(name="farq-test-1", sample_paths=[sample])
+    )
+    r2 = provider.clone_voice(
+        VoiceCloneRequest(name="farq-test-1", sample_paths=[sample])
+    )
+    r3 = provider.clone_voice(
+        VoiceCloneRequest(name="farq-test-2", sample_paths=[sample])
+    )
+    assert r1.provider == "mock"
+    assert r1.voice_id.startswith("mock_")
+    assert r1.voice_id == r2.voice_id, "same name => same id"
+    assert r1.voice_id != r3.voice_id, "different name => different id"
 
 
 def test_pipeline_chain_end_to_end_pure_python(tmp_path: Path) -> None:
