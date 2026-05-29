@@ -78,6 +78,9 @@ class ElevenLabsProvider(TTSProvider):
         text = request.text_ar
         if request.phonetic_hint:
             text = request.phonetic_hint
+        # NOTE: PCM output (pcm_44100) requires Creator+ tier — Starter
+        # silently returns MP3 instead. We take MP3 and decode to WAV via
+        # ffmpeg, which is already installed in the worker image.
         payload = {
             "text": text,
             "model_id": self.model_id,
@@ -87,11 +90,10 @@ class ElevenLabsProvider(TTSProvider):
                 "style": 0.35,
                 "use_speaker_boost": True,
             },
-            "output_format": "pcm_44100",
         }
         headers = {
             "xi-api-key": self.api_key,
-            "accept": "audio/pcm",
+            "accept": "audio/mpeg",
         }
 
         # ── one-time auth probe + safe fingerprint ──────────────────
@@ -118,7 +120,6 @@ class ElevenLabsProvider(TTSProvider):
         with httpx.Client(timeout=60) as client:
             r = client.post(url, json=payload, headers=headers)
             if r.status_code >= 400:
-                # Surface server-side reason in worker logs before raising.
                 log.warning(
                     "[elevenlabs] POST -> %s  resp_ct=%s  body=%s",
                     r.status_code,
@@ -126,18 +127,31 @@ class ElevenLabsProvider(TTSProvider):
                     r.text[:500],
                 )
             r.raise_for_status()
-            pcm = r.content
+            mp3_bytes = r.content
 
-        # Wrap raw 16-bit little-endian PCM in a WAV container.
-        import numpy as np
+        # Write MP3 to a sibling temp file then decode to WAV at our
+        # target sample rate using the ffmpeg already in the worker image.
+        import subprocess
+
         import soundfile as sf
 
-        samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
-        sf.write(out_path, samples, self.sample_rate, subtype="PCM_16")
-        duration_ms = int(1000 * len(samples) / self.sample_rate)
+        tmp_mp3 = out_path.with_suffix(".tts.mp3")
+        tmp_mp3.write_bytes(mp3_bytes)
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(tmp_mp3),
+                 "-ar", str(self.sample_rate), "-ac", "1",
+                 "-acodec", "pcm_s16le", str(out_path)],
+                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+        finally:
+            tmp_mp3.unlink(missing_ok=True)
+
+        info = sf.info(out_path)
+        duration_ms = int(1000 * info.frames / info.samplerate)
         return TTSResult(
             audio_path=out_path,
-            sample_rate=self.sample_rate,
+            sample_rate=info.samplerate,
             duration_ms=duration_ms,
         )
 
