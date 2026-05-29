@@ -5,6 +5,18 @@ import type { SongDetail, SongSummary } from "./api";
 
 const songs: SongSummary[] = [
   {
+    id: "00000000-0000-0000-0000-00000000beef",
+    slug: "yamarhaba",
+    title_ar: "يا مرحبا يا كل حاضر",
+    title_en: "Welcome to Everyone Here",
+    artist_ar: "فرقة فرق ساوند",
+    era: "classic",
+    duration_seconds: 220,
+    preview_url: "/samples/yamarhaba.mp3",
+    cover_image_url: null,
+    price_sar: 49,
+  },
+  {
     id: "00000000-0000-0000-0000-000000000001",
     slug: "demo-classic-1",
     title_ar: "زفّة العروس الكلاسيكية",

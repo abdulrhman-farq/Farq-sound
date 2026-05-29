@@ -1,3 +1,8 @@
+# Web (FastAPI) + Worker (Celery) shared dependencies.
+# Audio-pipeline-only deps (librosa, pyrubberband) live in
+# requirements-worker.txt so the web service builds without
+# ffmpeg / rubberband-cli system packages.
+
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
 pydantic==2.9.2
@@ -17,11 +22,7 @@ sentry-sdk[fastapi]==2.18.0
 pydub==0.25.1
 numpy==2.1.2
 soundfile==0.12.1
-librosa==0.10.2.post1
-pyrubberband==0.4.0
-# AI / ASR (loaded lazily; not required for mock mode)
-# faster-whisper==1.0.3
-# demucs==4.0.1
+
 # Dev
 pytest==8.3.3
 pytest-asyncio==0.24.0

@@ -14,6 +14,10 @@ const nextConfig = {
       { protocol: "https", hostname: "**.supabase.in" },
     ],
   },
+  webpack: (config) => {
+    config.resolve.symlinks = false;
+    return config;
+  },
 };
 
 export default withNextIntl(nextConfig);
