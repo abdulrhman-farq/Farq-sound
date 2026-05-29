@@ -53,12 +53,19 @@ def pitch_and_time_match(
     """Time-stretch + pitch-shift `generated_path` to match the duration
     and pitch contour of `reference_path` (the original segment).
     """
+    import gc
+
     import librosa
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    gen, sr_gen = librosa.load(generated_path, sr=None, mono=True)
-    ref, sr_ref = librosa.load(reference_path, sr=None, mono=True)
+    # float32 throughout — librosa defaults to float64 which doubles RAM.
+    gen, sr_gen = librosa.load(
+        generated_path, sr=None, mono=True, dtype=np.float32
+    )
+    ref, sr_ref = librosa.load(
+        reference_path, sr=None, mono=True, dtype=np.float32
+    )
 
     if sr_gen != sr_ref:
         gen = librosa.resample(gen, orig_sr=sr_gen, target_sr=sr_ref)
@@ -98,6 +105,9 @@ def pitch_and_time_match(
         stretched = np.pad(stretched, (0, target_samples - len(stretched)))
 
     sf.write(out_path, stretched.astype(np.float32), sr_gen)
+    # Drop large arrays before returning so the next stage starts clean.
+    del gen, ref, stretched
+    gc.collect()
     return out_path
 
 
@@ -115,20 +125,19 @@ def splice_into_vocals(
     audio, applying an equal-power crossfade on both edges.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    vocals, sr = sf.read(isolated_vocals_path)
+    # Force float32 + always_2d=False to halve memory vs the float64 default.
+    vocals, sr = sf.read(isolated_vocals_path, dtype="float32", always_2d=False)
     if vocals.ndim > 1:
-        vocals = np.mean(vocals, axis=1)
-    vocals = vocals.astype(np.float32)
+        vocals = np.mean(vocals, axis=1, dtype=np.float32)
 
     xfade_samples = int(crossfade_ms / 1000.0 * sr)
 
     for start_ms, end_ms, seg_path in replacements:
         start = int(start_ms / 1000.0 * sr)
         end = int(end_ms / 1000.0 * sr)
-        new_seg, sr_seg = sf.read(seg_path)
+        new_seg, sr_seg = sf.read(seg_path, dtype="float32", always_2d=False)
         if new_seg.ndim > 1:
-            new_seg = np.mean(new_seg, axis=1)
-        new_seg = new_seg.astype(np.float32)
+            new_seg = np.mean(new_seg, axis=1, dtype=np.float32)
         # Trim/pad to fit the slot exactly.
         slot_len = end - start
         if len(new_seg) > slot_len:

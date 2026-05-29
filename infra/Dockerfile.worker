@@ -23,4 +23,4 @@ RUN python /app/assets/make_demo_audio.py && ls -la /app/storage/songs/
 ENV PYTHONUNBUFFERED=1 \
     STORAGE_ROOT=/storage
 
-CMD ["celery", "-A", "app.workers.celery_app", "worker", "-l", "info", "--concurrency=2"]
+CMD ["celery", "-A", "app.workers.celery_app", "worker", "-l", "info", "--concurrency=1", "--max-memory-per-child=420000"]
