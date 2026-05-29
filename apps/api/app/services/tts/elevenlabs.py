@@ -9,6 +9,7 @@ API docs: https://elevenlabs.io/docs/api-reference/text-to-speech
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import httpx
@@ -26,6 +27,22 @@ from .base import (
     VoiceCloneRequest,
     VoiceCloneResult,
 )
+
+log = logging.getLogger(__name__)
+
+
+def _fingerprint(key: str) -> dict:
+    """Safe diagnostic fingerprint — never includes the full key."""
+    return {
+        "len": len(key),
+        "head6": key[:6],
+        "tail6": key[-6:],
+        "tail6_repr": repr(key[-6:]),
+        "has_whitespace": any(c in key for c in (" ", "\n", "\r", "\t")),
+        "has_quote": "'" in key or '"' in key,
+        "stripped_len": len(key.strip()),
+        "is_stripped": key == key.strip(),
+    }
 
 
 def _content_type_for(path: Path) -> str:
@@ -45,7 +62,8 @@ class ElevenLabsProvider(TTSProvider):
     base_url = "https://api.elevenlabs.io/v1"
 
     def __init__(self, api_key: str, model_id: str) -> None:
-        self.api_key = api_key
+        # Strip in case Render env value picked up trailing whitespace/CR.
+        self.api_key = api_key.strip()
         self.model_id = model_id
 
     @retry(
@@ -75,6 +93,28 @@ class ElevenLabsProvider(TTSProvider):
             "xi-api-key": self.api_key,
             "accept": "audio/pcm",
         }
+
+        # ── one-time auth probe + safe fingerprint ──────────────────
+        # Logged just before the TTS POST so a 401 diagnosis is trivial.
+        # No full key is ever printed. Only first/last 6 chars + flags.
+        fp = _fingerprint(self.api_key)
+        log.warning(
+            "[elevenlabs] fingerprint=%s voice=%s model=%s url=%s "
+            "header_names=%s",
+            fp, request.voice_model_id, self.model_id, url,
+            list(headers.keys()),
+        )
+        try:
+            with httpx.Client(timeout=15) as probe:
+                pr = probe.get(
+                    f"{self.base_url}/user",
+                    headers={"xi-api-key": self.api_key},
+                )
+                log.warning("[elevenlabs] auth-probe GET /v1/user -> %s", pr.status_code)
+        except Exception as exc:
+            log.warning("[elevenlabs] auth-probe error: %s", exc)
+        # ───────────────────────────────────────────────────────────
+
         with httpx.Client(timeout=60) as client:
             r = client.post(url, json=payload, headers=headers)
             r.raise_for_status()
