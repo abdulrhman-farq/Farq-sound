@@ -1,154 +1,120 @@
 # Farq Sound — Render Blueprint
-# ===============================
-# Connect this repo in the Render dashboard (Blueprints → New Blueprint),
-# Render will read this file and provision everything.
+# ==================================================
+# One-click deploy:
+#   - farq-sound-api    (FastAPI, HTTP, /health check)
+#   - farq-sound-worker (Celery, background — ffmpeg/rubberband baked in)
+#   - farq-sound-redis  (Managed Redis, private network)
 #
-# Manual env vars to set in dashboard AFTER first deploy (do NOT commit):
-#   - SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
-#     SUPABASE_JWT_SECRET, SUPABASE_STORAGE_BUCKET
-#   - ELEVENLABS_API_KEY (leave empty to run TTS in mock mode)
-#   - MOYASAR_API_KEY, MOYASAR_WEBHOOK_SECRET (leave empty for mock)
-#   - WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, RESEND_API_KEY
-#   - SENTRY_DSN_API
+# Uses Docker so ffmpeg + rubberband are installed correctly at image
+# build time (Render's Python runtime doesn't allow apt-get at runtime).
 #
-# After the API is live, update apps/web/.env (or your Vercel env):
-#   NEXT_PUBLIC_API_BASE_URL = https://<your-api-service>.onrender.com
+# Public values (Supabase URL + anon key, brand domains) are pre-filled.
+# Only true secrets are sync:false — set them in Render → Environment
+# AFTER the blueprint provisions:
+#   - SUPABASE_SERVICE_ROLE_KEY
+#   - SUPABASE_JWT_SECRET
+#   - ELEVENLABS_API_KEY   (leave empty → mock mode)
+#   - SENTRY_DSN_API       (optional)
 
 services:
-  # ---- FastAPI HTTP service ----
+  # ────────────────────────────────────────────────────────────────
+  # FastAPI HTTP service
+  # ────────────────────────────────────────────────────────────────
   - type: web
     name: farq-sound-api
-    runtime: python
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.api
+    dockerContext: .
     plan: starter
-    rootDir: apps/api
     region: frankfurt
-    pythonVersion: "3.12"
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: APP_ENV
         value: production
-      - key: APP_NAME
-        value: farq-sound
       - key: LOG_LEVEL
         value: info
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: farq-sound-redis
-          type: redis
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          name: farq-sound-redis
-          type: redis
-          property: connectionString
+      - key: PORT
+        value: "8000"
+      # Redis (auto-wired from the managed service below)
       - key: REDIS_URL
-        fromService:
-          name: farq-sound-redis
-          type: redis
-          property: connectionString
-      - key: ELEVENLABS_MODEL_ID
-        value: eleven_multilingual_v2
+        fromService: { type: redis, name: farq-sound-redis, property: connectionString }
+      - key: CELERY_BROKER_URL
+        fromService: { type: redis, name: farq-sound-redis, property: connectionString }
+      - key: CELERY_RESULT_BACKEND
+        fromService: { type: redis, name: farq-sound-redis, property: connectionString }
+      # Brand domains
+      - key: APP_BASE_URL
+        value: https://farq-sound-web.vercel.app
+      - key: API_BASE_URL
+        value: https://farq-sound-api.onrender.com
+      # Supabase (public values pre-filled, secrets below as sync:false)
+      - key: SUPABASE_URL
+        value: https://czuruornutpvymdphbmn.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6dXJ1b3JudXRwdnltZHBoYm1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NzMwNTMsImV4cCI6MjA5NDI0OTA1M30.GWikJi6x1g39LSsPh4fFD_rHBSClcnne4SwCj_LT6vI
       - key: SUPABASE_STORAGE_BUCKET
         value: farq-sound
-      # The keys below are set manually in the Render dashboard.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # ElevenLabs (empty → silent-tone mock)
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_multilingual_v2
+      # Sentry (optional)
+      - key: SENTRY_DSN_API
+        sync: false
+
+  # ────────────────────────────────────────────────────────────────
+  # Celery worker (background)
+  # ────────────────────────────────────────────────────────────────
+  - type: worker
+    name: farq-sound-worker
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.worker
+    dockerContext: .
+    plan: starter
+    region: frankfurt
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: REDIS_URL
+        fromService: { type: redis, name: farq-sound-redis, property: connectionString }
+      - key: CELERY_BROKER_URL
+        fromService: { type: redis, name: farq-sound-redis, property: connectionString }
+      - key: CELERY_RESULT_BACKEND
+        fromService: { type: redis, name: farq-sound-redis, property: connectionString }
+      - key: APP_BASE_URL
+        value: https://farq-sound-web.vercel.app
       - key: SUPABASE_URL
-        sync: false
+        value: https://czuruornutpvymdphbmn.supabase.co
       - key: SUPABASE_ANON_KEY
-        sync: false
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6dXJ1b3JudXRwdnltZHBoYm1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NzMwNTMsImV4cCI6MjA5NDI0OTA1M30.GWikJi6x1g39LSsPh4fFD_rHBSClcnne4SwCj_LT6vI
+      - key: SUPABASE_STORAGE_BUCKET
+        value: farq-sound
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: SUPABASE_JWT_SECRET
         sync: false
       - key: ELEVENLABS_API_KEY
         sync: false
-      - key: MOYASAR_API_KEY
-        sync: false
-      - key: MOYASAR_PUBLISHABLE_KEY
-        sync: false
-      - key: MOYASAR_WEBHOOK_SECRET
-        sync: false
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        sync: false
-      - key: WHATSAPP_ACCESS_TOKEN
-        sync: false
-      - key: WHATSAPP_TEMPLATE_DELIVERY
-        value: farq_sound_delivery
-      - key: RESEND_API_KEY
-        sync: false
-      - key: RESEND_FROM
-        value: "Farq Sound <hello@farqsound.sa>"
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_multilingual_v2
       - key: SENTRY_DSN_API
         sync: false
-      - key: APP_BASE_URL
-        sync: false
-      - key: API_BASE_URL
-        sync: false
 
-  # ---- Celery worker (audio render pipeline) ----
-  - type: worker
-    name: farq-sound-worker
-    runtime: python
-    plan: starter
-    rootDir: apps/api
-    region: frankfurt
-    pythonVersion: "3.12"
-    # ffmpeg + rubberband-cli are required for the audio render chain.
-    # Render's Python runtime is Debian-based, so apt is available at build.
-    buildCommand: |
-      apt-get update -qq && apt-get install -y -qq ffmpeg rubberband-cli libsndfile1
-      pip install -r requirements.txt
-    startCommand: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
-    envVars:
-      - fromGroup: farq-sound-shared
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: farq-sound-redis
-          type: redis
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          name: farq-sound-redis
-          type: redis
-          property: connectionString
-
-  # ---- Redis (broker + result backend) ----
+  # ────────────────────────────────────────────────────────────────
+  # Managed Redis
+  # ────────────────────────────────────────────────────────────────
   - type: redis
     name: farq-sound-redis
     plan: starter
     region: frankfurt
     ipAllowList: []
-    maxmemoryPolicy: allkeys-lru
-
-envVarGroups:
-  - name: farq-sound-shared
-    envVars:
-      - key: APP_ENV
-        value: production
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: SUPABASE_JWT_SECRET
-        sync: false
-      - key: SUPABASE_STORAGE_BUCKET
-        value: farq-sound
-      - key: ELEVENLABS_API_KEY
-        sync: false
-      - key: ELEVENLABS_MODEL_ID
-        value: eleven_multilingual_v2
-      - key: MOYASAR_API_KEY
-        sync: false
-      - key: MOYASAR_WEBHOOK_SECRET
-        sync: false
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        sync: false
-      - key: WHATSAPP_ACCESS_TOKEN
-        sync: false
-      - key: RESEND_API_KEY
-        sync: false
-      - key: SENTRY_DSN_API
-        sync: false
+    maxmemoryPolicy: noeviction

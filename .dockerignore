@@ -1,0 +1,45 @@
+# Keep the Docker build context tiny — Render charges build minutes.
+
+# Node / Next.js workspace (the api Dockerfile never needs these)
+node_modules
+**/node_modules
+apps/web
+.next
+.turbo
+.vercel
+
+# Python
+**/__pycache__
+**/.venv
+**/venv
+*.pyc
+*.pyo
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+# Local artifacts
+.runtime
+storage
+tmp
+apps/api/storage
+apps/api/.venv
+
+# Tests & dev-only assets (workers don't need them)
+apps/api/tests
+apps/api/smoke_test.py
+
+# Git + IDE
+.git
+.github
+.vscode
+.idea
+
+# Docs
+*.md
+docs/
+
+# Env files (NEVER bake into images)
+.env
+.env.*
+!.env.example

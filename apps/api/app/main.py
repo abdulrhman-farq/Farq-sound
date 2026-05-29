@@ -40,7 +40,13 @@ app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.app_base_url],
+    allow_origins=[
+        settings.app_base_url,
+        "http://localhost:3000",
+    ],
+    # Also accept any Vercel preview deploy of the same project, e.g.
+    # https://farq-sound-web-git-<branch>-<team>.vercel.app
+    allow_origin_regex=r"https://farq-sound-web.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
