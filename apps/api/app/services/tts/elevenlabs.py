@@ -117,6 +117,14 @@ class ElevenLabsProvider(TTSProvider):
 
         with httpx.Client(timeout=60) as client:
             r = client.post(url, json=payload, headers=headers)
+            if r.status_code >= 400:
+                # Surface server-side reason in worker logs before raising.
+                log.warning(
+                    "[elevenlabs] POST -> %s  resp_ct=%s  body=%s",
+                    r.status_code,
+                    r.headers.get("content-type"),
+                    r.text[:500],
+                )
             r.raise_for_status()
             pcm = r.content
 
